@@ -1,9 +1,9 @@
 import torch
-from line_profiler_pycharm import profile
-from torchinfo import summary
+# from line_profiler_pycharm import profile
+# from torchinfo import summary
 
 
-@profile
+# @profile
 def test_func():
     x = torch.randn(5, 5)
     print(x)
@@ -12,7 +12,7 @@ def test_func():
     return x_CUDA
 
 
-print("Hello, Amoeba05!")
+print("Hello, Animal01!")
 print("PyTorch version:", torch.__version__)
 print("CUDA available:", torch.cuda.is_available())
 
