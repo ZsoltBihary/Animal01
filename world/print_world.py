@@ -25,9 +25,6 @@ class PrintWorld:
                 print(row_string)
         print(horizontal)
 
-    # def print_action(self, action):
-    #     print(self.action_to_str.get(action.item(), 'UNKNOWN'))
-
 
 # ------------------ SANITY CHECK ------------------ #
 if __name__ == "__main__":
@@ -38,6 +35,6 @@ if __name__ == "__main__":
                     device='cpu')
     printer = PrintWorld()
     frame = True
-    printer.print(env.board[0, ...], frame=frame)
-    printer.print(env.board[1, ...], frame=frame)
-    printer.print(env.board[2, ...], frame=frame)
+    printer.print_board(env.board[0, ...], frame=frame)
+    printer.print_board(env.board[1, ...], frame=frame)
+    printer.print_board(env.board[2, ...], frame=frame)
