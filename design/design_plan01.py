@@ -43,7 +43,7 @@ class Animal:
         obs_next, rewards = self.env.step_animal(actions)
         return obs, actions, rewards, obs_next
 
-# === GridWorld ===
+# === Terrain ===
 class GridWorld:
     def __init__(self, batch_size=32, height=11, width=11, food_density=0.05, device='cpu'):
         self.B = batch_size

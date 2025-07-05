@@ -30,7 +30,7 @@ class SparseLinear(nn.Module):
 
 # ------------------ SANITY CHECK ------------------ #
 if __name__ == "__main__":
-    # from grid_world import GridWorld
+    # from grid_world import Terrain
 
     B, in_f, out_f, k = 2, 100, 90, 5
     device = 'cpu'

@@ -1,67 +1,6 @@
 import torch
-import torch.nn as nn
-from custom_layers import SparseLinear
-
-
-class BrainModel(nn.Module):
-    """
-    Sparse brain model that evolves internal neuron states and outputs action Q-values.
-
-    Structure:
-    - Perceptors: first `n_perceptors` neurons, overwritten by external observations.
-    - Hidden neurons: evolved via a SparseLinear layer (sparse connectivity).
-    - Motor neurons: final `n_motors` neurons, whose activations are further mapped to Q-values.
-
-    Non-linearity:
-    Uses sigmoid activation to clamp neuron activations for biological plausibility.
-
-    Attributes:
-        n_neurons (int): Total number of neurons in the brain.
-        n_perceptors (int): Number of perceptor neurons receiving external input.
-        n_motors (int): Number of motor neurons.
-        n_actions (int): Number of possible actions (Q-value outputs).
-        K (int): Number of incoming connections per neuron in the sparse layer.
-        think_layer (SparseLinear): Sparse linear layer evolving hidden + motor neurons.
-        non_linearity (nn.Module): Sigmoid activation function.
-        motor_to_q (nn.Linear): Linear layer mapping motor neuron outputs to Q-values.
-    """
-    def __init__(self, n_neurons=1000, n_perceptors=50, n_motors=10, n_actions=5, K=20):
-        super().__init__()
-        self.n_neurons = n_neurons
-        self.n_perceptors = n_perceptors
-        self.n_motors = n_motors
-        self.n_actions = n_actions
-        self.K = K
-        # This layer evolves hidden + motor neurons, using all neurons as input
-        self.think_layer = SparseLinear(
-            in_features=n_neurons,
-            out_features=n_neurons - n_perceptors,
-            K=K
-        )
-        # Non-linearity
-        self.non_linearity = nn.Sigmoid()
-        # This layer maps motor neurons to Q-values (unbounded)
-        self.motor_to_q = nn.Linear(n_motors, n_actions)
-
-    def think(self, x):
-        """
-        Calculate new hidden and motor neuron activations, and action values.
-        Input: x(batch, n_neurons)
-        Output: new_x(batch, n_neurons-n_perceptors), Q-values(batch, n_actions)
-        """
-        new_x = self.think_layer(x)
-        new_x = self.non_linearity(new_x)
-        q = self.motor_to_q(new_x[:, -self.n_motors:])
-        return new_x, q
-
-    def forward(self, x):
-        """
-        Forward pass for training.
-        Input: x(batch, n_neurons)
-        Output: Q-values(batch, n_actions)
-        """
-        _, q = self.think(x)
-        return q
+# import torch.nn as nn
+from nn_model.brain_model import BrainModel
 
 
 class Brain:
@@ -74,7 +13,7 @@ class Brain:
     invoking the BrainModel’s pure functional computations.
 
     Attributes:
-        model (BrainModel): The brain model instance.
+        model (BrainModel): The nn_model model instance.
         state (torch.Tensor): Internal neuron activations of shape (1, n_neurons).
         n_perceptors (int): Number of perceptor neurons.
         device (str or torch.device): Device on which tensors are allocated.
@@ -88,7 +27,17 @@ class Brain:
         # Initialize state: can be zeros or small random values
         self.state = torch.zeros(1, self.n_neurons, device=self.device)
 
+    def encode_observation(self, one_hot_obs: torch.Tensor):
+        # TODO: Clean up
+        """
+        one_hot_obs: (B, C, OW, OW)
+        """
+        B, C, OW, _ = one_hot_obs.shape
+        flat_obs = one_hot_obs.view(B, -1)  # (B, C * OW * OW)
+        self.state[:, self.perceptor_start:self.perceptor_end] = flat_obs
+
     def observe(self, observation: torch.Tensor):
+        # TODO: obsolete, delete!
         """
         Inject observation into perceptor neurons.
         Args:
@@ -110,6 +59,15 @@ class Brain:
             # Update non-perceptor neurons (slice in-place)
             self.state[:, self.n_perceptors:] = new_x
         return q
+
+# TODO: We need these methods...
+    # class Brain:
+    #     def encode_observation(self, obs):
+    #
+    #     # state update
+    #
+    #     def decide(self):
+    # # action from internal state
 
 
 # ------------------ SANITY CHECK ------------------ #

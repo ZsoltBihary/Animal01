@@ -23,7 +23,7 @@ Work in progress ...
 
 ---
 
-## 🧱 World Module
+## 🧱 Terrain Module
 
 ### `helper.py`
 
@@ -42,7 +42,7 @@ STAY, UP, DOWN, LEFT, RIGHT = 0, 1, 2, 3, 4
 Renders a single board using unicode characters for visual inspection.
 
 ```bash
-(A) - animal
+(A) - nn_model
  o  - food
  X  - wall
 ```
@@ -162,10 +162,10 @@ pip install torch
 
 Each module includes sanity checks under `__main__`:
 ```bash
-python world/print_world.py
-python world/grid_world.py
-python animal/custom_layers.py
-python animal/brain.py
+python core/print_world.py
+python core/terrain.py
+python nn_model/custom_layers.py
+python nn_model/nn_model.py
 ```
 
 ---
