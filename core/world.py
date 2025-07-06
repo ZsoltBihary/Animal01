@@ -1,10 +1,13 @@
+
 # import torch
 # from torch import Tensor
-# import torch.nn.functional as F
-# from utils.helper import EMPTY  # Includes EMPTY=0
+from typing import Self
+from nn_model.brain_model import BrainModel
+from core.brain import Brain
+from core.policy import RandomPolicy, BrainPolicy
 from core.animal import Animal
 from core.terrain import Terrain
-from utils.helper import print_grid, ACTION_STR
+from utils.helper import print_grid, ACTION_STR, N_ACTIONS, N_CELL_TYPES
 
 
 class World:
@@ -17,15 +20,44 @@ class World:
         self.terrain = terrain
         self.animal = animal
 
+    @classmethod
+    def factory(cls, B: int, H: int, W: int, R: int, wall_dens: float, food_dens: float,
+                with_brain=False,
+                n_neurons=0, n_motors=0, n_connections=0,
+                device='cpu') -> Self:
+
+        terrain = Terrain.random(B=B, H=H, W=W, R=R,
+                                 wall_density=wall_dens, food_density=food_dens,
+                                 device=device)
+
+        if with_brain:
+            K = R * 2 + 1
+            n_perceptors = K * K * (N_CELL_TYPES - 1)
+            model = BrainModel(n_neurons=n_neurons,
+                               n_perceptors=n_perceptors, n_motors=n_motors, n_connections=n_connections,
+                               n_actions=N_ACTIONS)
+
+            brain = Brain(B=B, model=model, device=device)
+            policy = BrainPolicy(brain=brain)
+        else:
+            policy = RandomPolicy()
+
+        animal = Animal(policy=policy)
+
+        world = World(terrain=terrain, animal=animal)
+
+        return world
+
     def step(self, verbose=1):
 
-        obs = self.terrain.get_observation(self.animal.obs_radius)          # (B, K, K)
+        obs = self.terrain.get_observation()          # (B, K, K)
         if verbose >= 2:
             print("Observed Window:")
             print_grid(grid=obs[0], frame=True)
         action, brain_cost = self.animal.policy(obs)                        # (B,), (B,)
         action_reward = self.terrain.resolve_action(action)                 # (B,)
         reward = action_reward - brain_cost                                 # (B,)
+        self.terrain.step()
         if verbose >= 1:
             print("Action:", ACTION_STR[action[0].item()], "  Reward:", reward[0].item())
             self.terrain.print()
