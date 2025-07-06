@@ -16,8 +16,8 @@ class SparseLinear(nn.Module):
         else:
             self.indices = index_tensor  # Tensor of shape (out_features, n_connections)
 
-        self.weight = nn.Parameter(torch.randn(out_features, connections) * 0.1)
-        self.bias = nn.Parameter(torch.zeros(out_features))
+        self.weight = nn.Parameter(torch.randn(out_features, connections) * 0.2)
+        self.bias = nn.Parameter(torch.randn(out_features) * 0.1)
 
     def forward(self, x):
         # x: (batch, in_features)

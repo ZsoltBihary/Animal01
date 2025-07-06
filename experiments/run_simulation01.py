@@ -1,6 +1,5 @@
 # run_simulation01.py
-from core.policy import RandomPolicy
-from core.animal import Animal
+from core.animal import Amoeba
 from core.terrain import Terrain
 from core.world import World
 
@@ -13,10 +12,8 @@ terrain = Terrain.random(B=B, H=H, W=W, R=R,
                          wall_density=wall_density, food_density=food_density,
                          device=device)
 
-policy = RandomPolicy()
-
-animal = Animal(policy=policy, obs_radius=R)
+animal = Amoeba()
 
 world = World(terrain=terrain, animal=animal)
 
-world.simulate(n_steps=10, verbose=1)
+world.simulate(n_steps=10, verbose=2)

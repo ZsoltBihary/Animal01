@@ -9,8 +9,16 @@ Work in progress ...
 
 ## 📁 Project Structure
 
-
 ---
+
+## ✅ Features
+
+- ✅ Batched environments (parallel simulations)
+- ✅ Toroidal (wrap-around) grid behavior
+- ✅ Sparse Q-learning-ready neural controller
+- ✅ Modular code for extensibility
+- ✅ Human-readable debug printing
+
 
 Example grid world:
 ```
@@ -24,16 +32,6 @@ Example grid world:
 |       o                 X    |
  ------------------------------
 ```
-
----
-
-## ✅ Features
-
-- ✅ Batched environments (parallel simulations)
-- ✅ Toroidal (wrap-around) grid behavior
-- ✅ Sparse Q-learning-ready neural controller
-- ✅ Modular code for extensibility
-- ✅ Human-readable debug printing
 
 ---
 
@@ -60,11 +58,12 @@ pip install torch
 
 ## 🧪 Run Tests
 
-Test scripts are in experiments/
+Test scripts are in experiments/.
 Current working test scripts:
 
 ```bash
 python experiments/run_simulation01.py
+python experiments/run_simulation02.py
 ```
 
 ---

@@ -40,7 +40,7 @@ class BrainModel(nn.Module):
         # Non-linearity
         self.non_linearity = nn.Sigmoid()
         # This layer maps motor neurons to Q-values (unbounded)
-        self.motor_to_q = nn.Linear(n_motors, n_actions)
+        self.motor_to_q = nn.Linear(n_motors, n_actions, bias=False)
 
     def think(self, x):
         """

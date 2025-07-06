@@ -31,7 +31,8 @@ class Brain:
         self.n_actions = model.n_actions
 
         # Initialize activation: can be zeros or small random values
-        self.activation = torch.zeros(self.B, self.n_neurons, device=self.device)
+        # torch.randn(out_features, connections) * 0.1
+        self.activation = torch.rand(self.B, self.n_neurons, device=self.device)
 
     def encode_observation(self, obs: torch.Tensor):
         # TODO: Clean up

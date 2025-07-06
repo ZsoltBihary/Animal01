@@ -4,8 +4,8 @@
 from typing import Self
 from nn_model.brain_model import BrainModel
 from core.brain import Brain
-from core.policy import RandomPolicy, BrainPolicy
-from core.animal import Animal
+# from core.policy import RandomPolicy, BrainPolicy
+from core.animal import Animal, Amoeba, Mammal
 from core.terrain import Terrain
 from utils.helper import print_grid, ACTION_STR, N_ACTIONS, N_CELL_TYPES
 
@@ -38,11 +38,13 @@ class World:
                                n_actions=N_ACTIONS)
 
             brain = Brain(B=B, model=model, device=device)
-            policy = BrainPolicy(brain=brain)
+            animal = Mammal(brain=brain)
+            # policy = BrainPolicy(brain=brain)
         else:
-            policy = RandomPolicy()
+            animal = Amoeba()
+            # policy = RandomPolicy()
 
-        animal = Animal(policy=policy)
+        # animal = Animal(policy=policy)
 
         world = World(terrain=terrain, animal=animal)
 
@@ -56,7 +58,7 @@ class World:
             print_grid(grid=obs[0], frame=True)
         action, brain_cost = self.animal.policy(obs)                        # (B,), (B,)
         action_reward = self.terrain.resolve_action(action)                 # (B,)
-        reward = action_reward - brain_cost                                 # (B,)
+        reward = action_reward + brain_cost                                 # (B,)
         self.terrain.step()
         if verbose >= 1:
             print("Action:", ACTION_STR[action[0].item()], "  Reward:", reward[0].item())
