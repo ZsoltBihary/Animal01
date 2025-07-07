@@ -7,9 +7,9 @@ from core.world import World
 # rand_world.simulate(n_steps=10, verbose=1)
 
 brain_world = World.factory(
-    B=3, H=7, W=11, R=2, wall_dens=0.1, food_dens=0.1,
+    B=3, H=7, W=11, R=2, wall_dens=0.0, food_dens=0.1,
     with_brain=True,
-    n_neurons=500, n_motors=50, n_connections=50,
+    n_neurons=200, n_motors=50, n_connections=10,
     device='cpu'
 )
-brain_world.simulate(n_steps=10, verbose=2)
+brain_world.simulate(n_steps=10, verbose=1)
