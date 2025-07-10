@@ -1,79 +1,32 @@
-# 🧠 Animal01
+# Animal Project
 
-**Animal01** is a biologically inspired neural simulation framework designed for agent-based learning and behavior modeling.  
-It features a sparse neural architecture with explicitly defined perceptor, hidden, and motor neurons.
-
-Work in progress ...
+## General Goal
+To understand basic **Reinforcement Learning (RL)** concepts through a concrete, simple example. Implement a simple environment and a decision-making agent that interacts with the environment, performs actions, and receives rewards.
 
 ---
 
-## 📚 Literature Review: Reinforcement Learning Algorithms
+## Minimum Program
 
-This section provides an accessible overview of foundational and advanced Reinforcement Learning (RL) approaches, suitable for beginners looking for clear conceptual understanding without heavy mathematical prerequisites.
-
----
-
-### 🧠 Core Concepts
-
-| Category                      | Description                                                                                                    |                                                                  
-| ----------------------------- |----------------------------------------------------------------------------------------------------------------| 
-| **Value-Based**               | Learns the value of being in a certain state (e.g., `V(s)`), often used in dynamic programming and TD methods. |                                                                
-| **Action-Value (Q-learning)** | Learns the expected reward of taking action `a` in state `s`, denoted as `Q(s, a)`.                            |                                                                  
-| **Policy-Based**              | Learns a policy function directly that maps states to actions without using a value function.                  |
-| **Temporal Difference (TD)**  | Updates estimates based partly on other learned estimates.                                                     |                                                                  
-| **Actor–Critic**              | Combines value and policy learning using separate structures: an actor (policy) and a critic (value function). |                                                                  
-| **Model-Based RL**            | Learns a model of the environment to plan and improve learning efficiency (e.g., MuZero).                      |                                                                  
+1. Study RL literature, understand **Q-learning (QL)** and **Deep Q-learning (DQL)** algorithms.
+2. Implement QL and DQL for our simple world.
+3. Observe the behavior of our animal, and have fun.
 
 ---
 
-### 📘 Recommended Resources
+## Proposed Simple World
 
-| Topic                | Resource                                                                                                                     |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Foundations**      | [Reinforcement Learning: An Introduction (Sutton & Barto)](http://incompleteideas.net/book/the-book-2nd.html) – Chapters 1–6 |
-| **Deep RL Overview** | [A Brief Survey of Deep Reinforcement Learning (Arulkumaran et al., 2017)](https://arxiv.org/abs/1708.05866)                 |
-| **TD Learning**      | [Temporal Difference Learning – Wikipedia](https://en.wikipedia.org/wiki/Temporal_difference_learning)                       |
-| **Policy Gradient**  | [Policy Gradient Methods – Wikipedia](https://en.wikipedia.org/wiki/Policy_gradient_method)                                  |
-| **Actor–Critic**     | [Actor–Critic Algorithms – Wikipedia](https://en.wikipedia.org/wiki/Actor-critic_algorithm)                                  |
-| **Model-Based RL**   | [Model-Based Reinforcement Learning: A Survey (Moerland et al., 2020)](https://arxiv.org/abs/2006.16712)                     |
+### Agent ("Animal")
 
----
+- **Actions**: `STAY`, `UP`, `DOWN`, `LEFT`, `RIGHT` (5 possible actions)
+- **Decision model ("Brain")**: Based on the Q(s, a) action-value function.
+- **Decision algorithm**:
+  - Given a state `s`, use the Q-function to obtain the 5 q(s, a) values.
+  - Generate policy probabilities via **softmax** (with very low temperature).
+  - Select an action according to the policy (balances resolution between near-equal Q-values).
+  - During rollout, combine this with ε-uniform random exploration.
 
-### 🤖 Advanced Architectures
+### Environment ("Terrain")
 
-| Architecture             | Description                                                                                  | Resource                                                                                                                                                                               |
-| ------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **DQN (Deep Q-Network)** | Neural extension of Q-learning for high-dimensional inputs (e.g. Atari).                     | [Arulkumaran et al., 2017](https://arxiv.org/abs/1708.05866)                                                                                                                           |
-| **AlphaZero**            | Combines deep neural networks with Monte Carlo Tree Search (MCTS); used in Chess, Go, Shogi. | [AlphaZero – Wikipedia](https://en.wikipedia.org/wiki/AlphaZero)                                                                                                                       |
-| **MuZero**               | Learns both the model and policy/value function; does not require a known environment model. | [MuZero – Wikipedia](https://en.wikipedia.org/wiki/MuZero), [MuZero 101 – Medium](https://medium.com/data-science/muzero-101-a-brief-introduction-to-deepminds-latest-ai-a2f1b3aa5275) |
-| **EfficientZero**        | A sample-efficient version of MuZero optimized for real-world environments.                  | [EfficientZero Explained – LessWrong](https://www.lesswrong.com/posts/mRwJce3npmzbKfxws/efficientzero-how-it-works)                                                                    |
-
----
-
-### 🧭 Suggested Reading Path
-
-1. **Start** with Sutton & Barto (Ch. 1–6): MDPs, TD, Q-learning
-2. **Explore** deep RL via [Arulkumaran et al.](https://arxiv.org/abs/1708.05866)
-3. **Understand** policy gradients and actor–critic on Wikipedia
-4. **Dive into** model-based planning via [Moerland et al.](https://arxiv.org/abs/2006.16712)
-5. **Finish** with AlphaZero, MuZero, and EfficientZero
-
----
-
-## 📁 Project Structure
-
----
-
-## ✅ Features
-
-- ✅ Batched environments (parallel simulations)
-- ✅ Toroidal (wrap-around) grid behavior
-- ✅ Sparse Q-learning-ready neural controller
-- ✅ Modular code for extensibility
-- ✅ Human-readable debug printing
-
-
-Example grid world:
 ```
  ------------------------------
 | X           o              X |
@@ -86,56 +39,113 @@ Example grid world:
  ------------------------------
 ```
 
----
+- A rectangular grid (H × W) with 3 types of cells:
+  - `EMPTY`
+  - `FOOD`
+  - `POISON`
+- The animal's position is tracked.
+- **Observation**: A square window of size (K × K), centered on the animal.
+- **Action resolution**:
+  - Animal moves according to the action (with **periodic boundary conditions**).
+  - Rewards are given as defined below.
+  - Consumed FOOD or POISON is regenerated randomly on an EMPTY cell far from the animal.
 
-## 🚧 Planned Extensions
+### Reward Rules
 
-- [ ] Observation model for visual field / local patch
-- [ ] Learning rule for evolving brain weights
-- [ ] Brain-Environment interaction logs
-- [ ] RL training loop
-
----
-
-## 📦 Requirements
-
-- Python 3.8+
-- PyTorch
-
-Install dependencies:
-```bash
-pip install torch
-```
+- Every action except `STAY`: **−1**
+- Landing on `FOOD`: **+100**
+- Landing on `POISON`: **−100**
+- Reward is **normalized** with `(1 - γ)` (see literature).
 
 ---
 
-## 🧪 Run Tests
+## Animal / Brain Types
 
-Test scripts are in experiments/.
-Current working test scripts:
+| Type     | Behavior Description |
+|----------|----------------------|
+| **Sponge** | `action = STAY` |
+| **Amoeba** | `action = random_action` |
+| **Insect** | `action = act(observation)` — stateless, reactive |
+| **Reptile** | `brain_state = observe(brain_state, observation)`<br>`action = act(brain_state)` — has memory |
+| **Mammal** | Same as Reptile, but with hard-wired architecture for memory/preprocessing |
+| **Human** | Internally simulates the world.<br>If rules are known → **AlphaZero**.<br>If rules are learned → **MuZero** |
 
-```bash
-python experiments/run_simulation01.py
-python experiments/run_simulation02.py
-```
-
----
-
-## 🧠 Inspiration
-
-This project is inspired by:
-- Sparse evolutionary algorithms
-- Biological brains (perceptors, motors, internal state)
-- Reinforcement learning agents
+💡 **Focus for now**: Implement **Amoeba** (benchmark) and **Insect**. Reptile support may be considered in the interface.
 
 ---
 
-## 📜 License
+## Algorithms to Implement
 
-MIT License
+### 1. Q-Learning (QL) with Table
+
+- Q(s, a) is stored in a lookup table.
+- Feasible for small observation windows (K = 3), up to the Insect level.
+- If converged, gives optimal policy.
+
+### 2. Q-Learning with Heuristics
+
+- Q(s, a) is modeled as a **parametrized function**.
+- Optimize parameters through training.
+- Effectively equivalent to DQL training pipeline.
+
+### 3. Deep Q-Learning (DQL)
+
+- Q(s, a) is modeled as a **neural network**:
+  - `Q: s → q_a`
+- Enables scalable, generalizable learning.
+
+### Practical Deep Q-Learning Training Strategy
+
+- **Rollout policy**: Based on the `Q_online` model
+- **Experience buffer**: Stores `(state, action, TD-target)` tuples during rollout
+- **Training**:
+  - Performed asynchronously or periodically, decoupled from rollout
+  - Only a few epochs per batch (e.g. 1–4), depending on throughput
+  - Uses buffered data with standard TD loss:  
+  L = (Q_online(s, a; θ) − y)², where  
+  y = r + γ * maxₐ′ Q_target(s′, a′)
+- **Q_target update**: Occasional hard or soft copy of `Q` to `Q_target`
+- **Parallel rollout**: Hundreds of environment instances generate rollouts concurrently for high throughput
 
 ---
 
-## 🤝 Contributions
+## Literature Review
 
-Welcome! The project is intentionally minimal — let us discuss.
+### Core RL Texts
+
+- **Reinforcement Learning: An Introduction** (Sutton & Barto) – Chapters 1–6
+- **A Brief Survey of Deep Reinforcement Learning** (Arulkumaran et al., 2017)
+
+### DQL Resources
+
+- [Minh 2017 DQL Slides (UIUC)](https://courses.grainger.illinois.edu/cs546/sp2018/Slides/Apr05_Minh.pdf)
+
+### World Simulation Models
+
+- [AlphaZero Paper (DeepMind)](https://arxiv.org/abs/1712.01815)
+- [MuZero Paper (DeepMind)](https://arxiv.org/abs/1911.08265)
+- [World Models (2018)](https://arxiv.org/abs/1803.10122)
+- [World Models (2023)](https://arxiv.org/abs/2301.04104)
+
+### MuZero in Complex Environments
+
+- [MuZero for Stochastic / Partially Observable Envs (ICLR 2022)](https://iclr.cc/virtual/2022/spotlight/6833?utm_source=chatgpt.com)
+- [OpenReview: MuZero (2022)](https://openreview.net/pdf?id=X6D9bAHhBQ1)
+
+### Model Optimization
+
+- [Vector Quantized Models (Ozair et al., 2021)](https://proceedings.mlr.press/v139/ozair21a/ozair21a.pdf)
+- [EfficientZero: How It Works (LessWrong)](https://www.lesswrong.com/posts/mRwJce3npmzbKfxws/efficientzero-how-it-works?utm_source=chatgpt.com#5__Conclusions)
+
+### GitHub Projects
+
+- [MuZero General (Gomoku example)](https://github.com/werner-duvaud/muzero-general/blob/master/games/gomoku.py)
+- [MuZero in gym-minigrid](https://github.com/mit-acl/gym-minigrid)
+
+---
+
+## License
+
+_This project is intended for educational and research purposes._
+
+---
