@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 # import torch.nn as nn
-from nn_model.brain_model import BrainModel
+from for_later.brain_model import BrainModel
 from utils.helper import N_CELL_TYPES, N_ACTIONS, BRAIN_COST
 
 

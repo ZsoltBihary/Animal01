@@ -2,15 +2,21 @@ import torch
 from torch import Tensor
 
 # Cell types
-EMPTY, WALL, FOOD, ANIMAL = 0, 1, 2, 3
-CELL_STR = {EMPTY: '   ', WALL: ' X ', FOOD: ' o ', ANIMAL: '(A)'}
-N_CELL_TYPES = 4
+EMPTY, FOOD, POISON, ANIMAL = 0, 1, 2, 3
+CELL_STR = {EMPTY: '   ', FOOD: ' o ', POISON: ' x ', ANIMAL: '(A)'}
+C = 3  # number of observable cell types (w/o ANIMAL), used for shapes like (B, C, K, K)
+
 # Actions
 STAY, UP, DOWN, LEFT, RIGHT = 0, 1, 2, 3, 4
 ACTION_STR = {STAY: 'STAY', UP: 'UP', DOWN: 'DOWN', LEFT: 'LEFT', RIGHT: 'RIGHT'}
-N_ACTIONS = 5
+A = 5  # number of actions, used for shapes like (B, A)
+
 # Rewards
-FOOD_REWARD, WALL_PENALTY, MOVE_COST, BRAIN_COST = 10.0, -10.0, -1.0, -0.0 / 1000
+FOOD_REWARD, POISON_REWARD, MOVE_REWARD = 100.0, -100.0, -1.0
+
+# Observation window
+R = 2
+K = 2 * R + 1
 
 
 class ResolveMove:
