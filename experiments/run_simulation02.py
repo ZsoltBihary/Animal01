@@ -1,5 +1,5 @@
 # run_simulation02.py
-from core.terrain import Terrain
+from core.old_terrain import Terrain
 from core.world import World
 from core.animal import Amoeba, Insect
 

@@ -2,40 +2,119 @@ import torch
 from torch.utils.data import Dataset
 
 
-class StateTargetReplayBuffer(Dataset):
-    def __init__(self, time_size, batch_size, state_shape, target_shape, device='cpu'):
-        self.T = time_size
-        self.B = batch_size
-        self.ptr = 0  # current write index along the time axis
-        self.states = torch.zeros((self.T, self.B) + state_shape, device=device)
-        self.targets = torch.zeros((self.T, self.B) + target_shape, device=device)
-        self.filled = False  # becomes True after first wraparound
+class ReplayBuffer(Dataset):
+    def __init__(self, capacity, state_shape, device='cpu', dtype=torch.float32):
+        self.capacity = capacity
+        self.device = device
 
-    def push(self, state_batch, target_batch):
-        assert state_batch.shape[0] == self.B
-        assert target_batch.shape[0] == self.B
+        self.states = torch.empty((capacity, *state_shape), dtype=dtype, device=device)
+        self.actions = torch.empty((capacity,), dtype=torch.long, device=device)
+        self.target_qs = torch.empty((capacity,), dtype=dtype, device=device)
 
-        self.states[self.ptr] = state_batch
-        self.targets[self.ptr] = target_batch
+        self.index = 0
+        self.size = 0
 
-        self.ptr = (self.ptr + 1) % self.T
-        if self.ptr == 0:
-            self.filled = True
+    def append(self, states: torch.Tensor, actions: torch.Tensor, target_qs: torch.Tensor):
+        """
+        Append a batch of transitions to the buffer.
+
+        Args:
+            states:     Tensor (B, C, K, K)
+            actions:    Tensor (B,)
+            target_qs:  Tensor (B,)
+        """
+        B = states.size(0)
+
+        # Make sure tensors are on the correct device
+        states = states.to(self.device)
+        actions = actions.to(self.device)
+        target_qs = target_qs.to(self.device)
+
+        end = self.index + B
+        if end <= self.capacity:
+            self.states[self.index:end] = states
+            self.actions[self.index:end] = actions
+            self.target_qs[self.index:end] = target_qs
+        else:
+            first_part = self.capacity - self.index
+            second_part = B - first_part
+
+            self.states[self.index:] = states[:first_part]
+            self.actions[self.index:] = actions[:first_part]
+            self.target_qs[self.index:] = target_qs[:first_part]
+
+            self.states[:second_part] = states[first_part:]
+            self.actions[:second_part] = actions[first_part:]
+            self.target_qs[:second_part] = target_qs[first_part:]
+
+        self.index = (self.index + B) % self.capacity
+        self.size = min(self.size + B, self.capacity)
 
     def __len__(self):
-        # Only T-1 rows are usable for (state, target) alignment
-        return (self.T - 1) * self.B if self.filled else max(0, (self.ptr - 1) * self.B)
+        return self.size
 
     def __getitem__(self, idx):
-        assert self.filled, "Replay buffer not full yet — do not sample before buffer is fully populated."
-        row = idx // self.B
-        col = idx % self.B
+        actual_idx = (self.index - self.size + idx) % self.capacity
+        return (
+            self.states[actual_idx],
+            self.actions[actual_idx],
+            self.target_qs[actual_idx]
+        )
 
-        # Map to aligned (state, target) pair: state[t], target[t+1]
-        i = (self.ptr + row) % self.T
-        j = (self.ptr + row + 1) % self.T
 
-        state = self.states[i, col]
-        target = self.targets[j, col]
+if __name__ == "__main__":
+    torch.manual_seed(0)
 
-        return state, target
+    B = 4
+    capacity = 10
+    state_shape = (2, 3, 3)  # e.g. (C, K, K)
+
+    buffer = ReplayBuffer(capacity=capacity, state_shape=state_shape)
+
+    # Insert two batches of 4 transitions
+    for batch_id in range(2):
+        states = torch.ones((B, *state_shape)) * batch_id
+        actions = torch.arange(B) + batch_id * 10
+        target_qs = torch.arange(B, dtype=torch.float32) + batch_id * 100
+        buffer.append(states, actions, target_qs)
+
+    print("\nBuffer contents after 2 appends:")
+    for i in range(len(buffer)):
+        s, a, tq = buffer[i]
+        print(f"i={i} | action={a.item():>3} | target_q={tq.item():>6.1f} | state[0,0,0]={s[0, 0, 0].item()}")
+
+    # Insert batch to overflow the buffer
+    states = torch.ones((B, *state_shape)) * 9
+    actions = torch.arange(B) + 99
+    target_qs = torch.ones(B) * 999
+    buffer.append(states, actions, target_qs)
+
+    print("\nBuffer contents after overflow:")
+    for i in range(len(buffer)):
+        s, a, tq = buffer[i]
+        print(f"i={i} | action={a.item():>3} | target_q={tq.item():>6.1f} | state[0,0,0]={s[0, 0, 0].item()}")
+
+    # Test DataLoader integration
+    print("\nIterating with DataLoader:")
+    loader = torch.utils.data.DataLoader(buffer, batch_size=2, shuffle=True)
+    for batch in loader:
+        s, a, tq = batch
+        print(f"  batch_actions: {a.tolist()}")
+
+# buffer = CircularQBuffer(
+#     capacity=50000,
+#     state_shape=(4, 16, 16),
+#     device='cuda'  # or 'cpu'
+# )
+#
+# # During rollout:
+# buffer.append(state, action, target_q)  # all tensors, shape: (B, ...)
+#
+# # For training:
+# loader = torch.utils.data.DataLoader(buffer, batch_size=128, shuffle=True)
+#
+# for s, a, tq in loader:
+#     # s: (B, C, K, K)
+#     # a: (B,)
+#     # tq: (B,)
+#     ...
