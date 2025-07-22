@@ -13,14 +13,20 @@
 
 import torch
 from torch import Tensor
+import torch.nn as nn
 import torch.nn.functional as F
 from abc import ABC, abstractmethod
+from typing import Type, Optional
 from core.q_model import MetazoanQModel, VertebrateQModel
 from core.types import Observation, State, Action
 
 
 # === Base Animal Class ===
 class Animal(ABC):
+    def __init__(self, observation_shape: tuple[int, ...], num_actions: int):
+        self.observation_shape = observation_shape
+        self.num_actions = num_actions
+
     @abstractmethod
     def act(self, observation: Observation = None) -> Action: ...
 
@@ -44,12 +50,28 @@ class Animal(ABC):
 #         return action
 
 
+class Animala(ABC):
+    def __init__(
+        self,
+        obs_dim: int,
+        model_class: Type[nn.Module],
+        model_kwargs: Optional[dict] = None
+    ):
+        if model_kwargs is None:
+            model_kwargs = {}
+
+        self.model = model_class(obs_dim=obs_dim, **model_kwargs)
+
+
 # === Metazoans (can learn) ===
 class Metazoan(Animal, ABC):
     state_shape: tuple
 
-    def __init__(self, model: MetazoanQModel, state_shape: tuple[int, ...], epsilon=0.1, temperature=0.1):
-        # self.state_shape = state_shape
+    def __init__(self, observation_shape: tuple[int, ...], state_shape: tuple[int, ...], num_actions: int,
+                 model: MetazoanQModel,
+                 epsilon=0.1, temperature=0.1):
+        super().__init__(observation_shape=observation_shape, num_actions=num_actions)
+        self.state_shape = state_shape
         self.model = model
         self.epsilon = epsilon          # used in epsilon-greedy action selection
         self.temperature = temperature  # used in logits for random policy
@@ -94,9 +116,7 @@ class Arthropod(Metazoan, ABC):
 
 # === Vertebrates (can learn, have brain state) ===
 class Vertebrate(Metazoan, ABC):
-    def __init__(self, model: VertebrateQModel, state_shape: tuple[int, ...], epsilon=0.1, temperature=0.1):
-        super().__init__(model, state_shape, epsilon, temperature)
-        self.brain_state = None  # TODO: need some initialization ...
+    brain_state: State
 
     @abstractmethod
     def imprint(self, observation: Observation): ...

@@ -80,6 +80,7 @@ class GridWorld(World):
         Args:
             action: Tensor of shape (B,)
         Returns:
+            observation: Observation (B, K, K)
             reward: Tensor of shape (B,)
         """
         # Determine animal's new position
@@ -103,10 +104,9 @@ class GridWorld(World):
 
     def step(self):
         """
-        Stochastically change one cell towards type that is farthest from its density target,
+        Stochastically change one cell towards the type that is farthest from its density target,
         if cell is outside of observation window.
         """
-        # B, H, W = self.grid.shape
         # Compute current counts:
         count = F.one_hot(self.grid, num_classes=self.C+1).sum(dim=(1, 2))[:, :-1]  # (B, C)
         # Compute diff and select new cell per batch

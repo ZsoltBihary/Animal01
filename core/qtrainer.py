@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import DataLoader
+import copy
 from typing import Optional, Callable
+from line_profiler_pycharm import profile
 
 
 class QTrainer:
@@ -8,11 +10,11 @@ class QTrainer:
         self,
         q_model: torch.nn.Module,
         buffer: torch.utils.data.Dataset,
+        device: torch.device,
         batch_size: int = 128,
         learning_rate: float = 1e-3,
         optimizer: Optional[torch.optim.Optimizer] = None,
-        loss_fn: Optional[Callable] = None,
-        device: Optional[torch.device] = None
+        loss_fn: Optional[Callable] = None
     ):
         """
         Initializes the Q-learning trainer.
@@ -23,18 +25,19 @@ class QTrainer:
             learning_rate:  Used only if default optimizer is constructed.
             optimizer:      Optimizer for the Q-network. Defaults to Adam if None.
             loss_fn:        Loss function. Defaults to MSELoss if None.
-            device:         Device to train on. Inferred from q_model if None.
+            device:         Device to train on.
         """
-        self.q_model = q_model
+        self.trainer_model = copy.deepcopy(q_model).to(device)
         self.buffer = buffer
+        self.device = device
         self.batch_size = batch_size
-        self.device = device or next(q_model.parameters()).device
-        self.q_model.to(self.device)
-        self.optimizer = optimizer or torch.optim.Adam(q_model.parameters(), lr=learning_rate)
+        # self.q_model.to(self.device)
+        self.optimizer = optimizer or torch.optim.Adam(self.trainer_model.parameters(), lr=learning_rate)
         self.loss_fn = loss_fn or torch.nn.MSELoss()
 
+    @profile
     def train(self, epochs: int = 1):
-        self.q_model.train()
+        self.trainer_model.train()
         loader = DataLoader(self.buffer, batch_size=self.batch_size, shuffle=True)
 
         for epoch in range(epochs):
@@ -46,7 +49,7 @@ class QTrainer:
                 action_batch = action_batch.to(self.device)
                 target_q_batch = target_q_batch.to(self.device)
 
-                q_values = self.q_model(state_batch)
+                q_values = self.trainer_model(state_batch)
                 q_selected = q_values.gather(1, action_batch.unsqueeze(1)).squeeze(1)
 
                 loss = self.loss_fn(q_selected, target_q_batch)

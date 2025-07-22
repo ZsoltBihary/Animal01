@@ -3,7 +3,7 @@
 # import torch
 from torch import Tensor
 
-# For now, all types are simple Tensor ...
+# For now, all types are simply Tensor ...
 Observation = Tensor
 State = Tensor
 Action = Tensor

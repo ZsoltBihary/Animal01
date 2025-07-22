@@ -4,6 +4,11 @@ from abc import ABC, abstractmethod
 
 
 class MetazoanQModel(nn.Module, ABC):
+    def __init__(self, state_shape: tuple[int, ...], num_actions: int):
+        super().__init__()
+        self.state_shape = state_shape
+        self.num_actions = num_actions
+
     @abstractmethod
     def forward(self, state: Tensor) -> Tensor: ...
 
@@ -16,15 +21,49 @@ class VertebrateQModel(MetazoanQModel):
         q_values, _ = self.Q_and_update(state)
         return q_values
 
-#
-# class InsectQModel(MetazoanQModel):
-#     def forward(self, state: Tensor) -> Tensor:
-#         B = state.shape[0]
-#         A = 5
-#         q_values = torch.zeros(B, A)
-#         return q_values
 
-#
+class DuelingQHead(nn.Module):
+    def __init__(self, in_features, hid_features, num_actions):
+        """
+        Args:
+            in_features:  Dimension of the input features (output from trunk).
+            hid_features:  Dimension of the hidden features (output.
+            num_actions:  Number of discrete actions.
+        """
+        super().__init__()
+
+        # Value stream: outputs a scalar V(s)
+        self.value_stream = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(in_features=in_features, out_features=hid_features),
+            nn.ReLU(),
+            nn.Linear(in_features=hid_features, out_features=1)
+        )
+
+        # Advantage stream: outputs a vector A(s, a)
+        self.advantage_stream = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(in_features=in_features, out_features=hid_features),
+            nn.ReLU(),
+            nn.Linear(in_features=hid_features, out_features=num_actions)
+        )
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor of shape (B, feature_dim), the output from the trunk.
+        Returns:
+            q_values: Tensor of shape (B, num_actions)
+        """
+        V = self.value_stream(x)                   # (B, 1)
+        A = self.advantage_stream(x)               # (B, A)
+        A_mean = A.mean(dim=1, keepdim=True)       # (B, 1)
+
+        # Combine streams: Q(s,a) = V(s) + A(s,a) - mean_a(A(s,a))
+        Q = V + (A - A_mean)                       # (B, A)
+        return Q
+
+
 # class QInsect01(nn.Module):
 #     """
 #     Standard residual CNN model
@@ -73,43 +112,7 @@ class VertebrateQModel(MetazoanQModel):
 #         return q_values
 #
 #
-# class DuelingQHead(nn.Module):
-#     def __init__(self, feature_dim, num_actions):
-#         """
-#         Args:
-#             feature_dim:  Dimension of the input features (output from trunk).
-#             num_actions:  Number of discrete actions.
-#         """
-#         super().__init__()
-#
-#         # Value stream: outputs a scalar V(s)
-#         self.value_stream = nn.Sequential(
-#             nn.Linear(feature_dim, feature_dim),
-#             nn.ReLU(),
-#             nn.Linear(feature_dim, 1)
-#         )
-#
-#         # Advantage stream: outputs a vector A(s, a)
-#         self.advantage_stream = nn.Sequential(
-#             nn.Linear(feature_dim, feature_dim),
-#             nn.ReLU(),
-#             nn.Linear(feature_dim, num_actions)
-#         )
-#
-#     def forward(self, x):
-#         """
-#         Args:
-#             x: Tensor of shape (B, feature_dim), the output from the trunk.
-#         Returns:
-#             q_values: Tensor of shape (B, num_actions)
-#         """
-#         V = self.value_stream(x)                   # (B, 1)
-#         A = self.advantage_stream(x)               # (B, A)
-#         A_mean = A.mean(dim=1, keepdim=True)       # (B, 1)
-#
-#         # Combine streams: Q(s,a) = V(s) + A(s,a) - mean_a(A(s,a))
-#         Q = V + (A - A_mean)                       # (B, A)
-#         return Q
+
 #
 #
 # # ------------------ SANITY CHECK ------------------ #
