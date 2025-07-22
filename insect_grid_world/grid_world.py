@@ -5,6 +5,7 @@ from torch import Tensor
 # from utils.helper import STAY, C
 # from utils.helper import ResolveMove, print_grid, periodic_distance
 from core.world import World
+from core.types import Observation, Action
 import torch.nn.functional as F
 
 
@@ -29,7 +30,8 @@ class GridWorld(World):
     def __init__(self, B: int, H: int, W: int, R: int,
                  food_reward: float, poison_reward: float, move_reward: float,
                  food_density: float, poison_density: float):
-        self.B, self.H, self.W, self.R = B, H, W, R  # batch, height, width, observation radius
+        super().__init__(B=B)  # batch size is determined in class World
+        self.H, self.W, self.R = H, W, R  # height, width, observation radius
         self.K = 2 * R + 1  # observation window size
 
         # Rewards depend on cell animal lands on:
@@ -57,7 +59,11 @@ class GridWorld(World):
         grid[torch.arange(self.B), y, x] = self.ANIMAL
         return grid, animal_pos
 
-    def get_observation(self) -> Tensor:
+    def zero_action(self) -> Action:
+        action = torch.full(size=(self.B, ), fill_value=self.STAY)
+        return action
+
+    def get_observation(self) -> Observation:
         """ Returns observation window around the animal: observation (B, K, K) """
         # Pad grid periodically
         padded = F.pad(self.grid, (self.R, self.R, self.R, self.R), mode="circular")  # (B, H + 2R, W + 2R)
@@ -69,7 +75,7 @@ class GridWorld(World):
         observation = padded[b, y, x]  # (B, K, K)
         return observation
 
-    def resolve_action(self, action: Tensor) -> Tensor:
+    def resolve_action(self, action: Action) -> tuple[Observation, Tensor]:
         """
         Args:
             action: Tensor of shape (B,)
@@ -92,7 +98,8 @@ class GridWorld(World):
         # Update position
         self.animal_pos = new_pos
         self.step()
-        return reward
+        observation = self.get_observation()
+        return observation, reward
 
     def step(self):
         """
@@ -130,7 +137,7 @@ class GridWorld(World):
     #     mask = (d <= self.R).reshape(H, W)
     #     return mask
 
-    def print(self):
+    def print_world(self):
         horizontal = " "
         for _ in range(self.W * 3):
             horizontal = horizontal + "─"
@@ -141,6 +148,9 @@ class GridWorld(World):
             row_string = ''.join(row_chars)
             print("│" + row_string + "│")
         print(horizontal)
+
+    def print_action_reward(self, action: Action, reward: Tensor) -> None:
+        print("Action:", self.ACTION_STR[action[0].item()], "  Reward:", reward[0].item())
 
     def periodic_distance(self, a: Tensor, b: Tensor) -> Tensor:
         """
@@ -166,11 +176,12 @@ if __name__ == "__main__":
                       food_density=0.4, poison_density=0.2)
     # kitchen = Terrain.random(B=3, H=7, W=11, R=2,
     #                          food_density=0.1, poison_density=0.1)
-    world.print()
+    world.print_world()
     for _ in range(10):
         action = torch.ones(world.B, dtype=torch.long) * 3
-        world.resolve_action(action)
-        world.print()
+        observation, reward = world.resolve_action(action)
+        world.print_action_reward(action, reward)
+        world.print_world()
 
     # mask = kitchen.get_visible_mask()
     # print(mask.int())

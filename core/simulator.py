@@ -15,21 +15,24 @@ class Simulator:
         if save_history:
             # TODO: set up history
             pass
+
+        action = self.world.zero_action()
+        observation, _ = self.world.resolve_action(action)
+
         if self.verbose >= 2:
             print("World at start:")
-            self.world.print()
+            self.world.print_world()
         if self.verbose >= 1:
             print("Simulation is starting ...")
 
         for t in range(n_steps):
             if self.verbose >= 2:
                 print(t + 1, "/", n_steps)
-            observation = self.world.get_observation()
             action = self.animal.act(observation)
-            reward = self.world.resolve_action(action)
+            observation, reward = self.world.resolve_action(action)
             if self.verbose >= 2:
-                print("Action:", self.world.ACTION_STR[action[0].item()], "  Reward:", reward[0].item())
-                self.world.print()
+                self.world.print_action_reward(action, reward)
+                self.world.print_world()
 
         if self.verbose >= 1:
             print("Simulation ended.")
