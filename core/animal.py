@@ -13,11 +13,9 @@
 
 import torch
 from torch import Tensor
-import torch.nn as nn
 import torch.nn.functional as F
 from abc import ABC, abstractmethod
-from typing import Type, Optional
-from core.q_model import MetazoanQModel, VertebrateQModel
+from core.q_model import MetazoanQModel  # , VertebrateQModel
 from core.types import Observation, State, Action
 
 
@@ -48,19 +46,6 @@ class Animal(ABC):
 #         B = observation.shape[0]
 #         action = torch.randint(low=0, high=self.A, size=(B,))
 #         return action
-
-
-class Animala(ABC):
-    def __init__(
-        self,
-        obs_dim: int,
-        model_class: Type[nn.Module],
-        model_kwargs: Optional[dict] = None
-    ):
-        if model_kwargs is None:
-            model_kwargs = {}
-
-        self.model = model_class(obs_dim=obs_dim, **model_kwargs)
 
 
 # === Metazoans (can learn) ===

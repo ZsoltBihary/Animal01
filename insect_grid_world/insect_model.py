@@ -31,7 +31,32 @@ class InsectQModel(MetazoanQModel):
         q_values = self.duel(x)
         return q_values
 
-# class Insect02(nn.Module):
+
+# === SOME MODEL IDEAS FOR LATER ===
+# class QInsect01(nn.Module):
+#     """
+#     Standard residual CNN model
+#     """
+#     def __init__(self):
+#         super().__init__()
+#         hid_features = 2 * A
+#         self.trunk = nn.Linear(in_features=C * K * K, out_features=hid_features)
+#         self.duel_head = DuelingQHead(feature_dim=hid_features, num_actions=A)
+#
+#     def forward(self, state: Tensor):
+#         """
+#         Input: state(B, C, K, K)
+#         Output: q_values(B, A)
+#         """
+#         x = state.flatten(1)
+#         x = self.trunk(x)
+#         x = torch.relu(x)
+#         q_values = self.duel_head(x)
+#
+#         return q_values
+#
+#
+# class QInsect02(nn.Module):
 #     """
 #     Standard residual CNN model
 #     """
@@ -54,4 +79,16 @@ class InsectQModel(MetazoanQModel):
 #         x = x.flatten(1)
 #         q_values = self.output_lin(x)
 #         return q_values
-#
+
+
+# # ------------------ SANITY CHECK ------------------ #
+# if __name__ == "__main__":
+#     # a = torch.tensor([[0, 0], [9, 9]]).long()
+#     # b = torch.tensor([[9, 6], [0, 0]]).long()
+#     # print(periodic_distance(a, b, H=10, W=10))
+#     B = 2
+#     state = torch.randn(B, C, K, K)
+#     print(state.shape)
+#     q_model = QInsect01()
+#     q_values = q_model(state)
+#     print(q_values.shape)

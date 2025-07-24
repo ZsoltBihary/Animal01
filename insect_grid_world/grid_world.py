@@ -5,6 +5,7 @@ from torch import Tensor
 # from utils.helper import STAY, C
 # from utils.helper import ResolveMove, print_grid, periodic_distance
 from core.world import World
+from core.simulator import SimulationResult
 from core.types import Observation, Action
 import torch.nn.functional as F
 
@@ -58,6 +59,12 @@ class GridWorld(World):
         # Mark animal position in grid (overwrites whatever was there)
         grid[torch.arange(self.B), y, x] = self.ANIMAL
         return grid, animal_pos
+
+    def get_state(self) -> dict:
+        return {
+            "grid": self.grid[0],
+            "animal_pos": self.animal_pos[0]
+        }
 
     def zero_action(self) -> Action:
         action = torch.full(size=(self.B, ), fill_value=self.STAY)
@@ -167,6 +174,42 @@ class GridWorld(World):
         dy = torch.minimum(dy, self.H - dy)
         dx = torch.minimum(dx, self.W - dx)
         return torch.maximum(dy, dx)  # Chebyshev (L∞) distance
+
+
+class GridSimulationResult(SimulationResult):
+    """
+    Stores the simulation data for a single grid-world trajectory,
+    extracted from the first element of a batched simulation (i.e., index 0).
+    avg_reward is however the batch-averaged reward.
+    Suitable for animation or inspection.
+    """
+    def __init__(self, capacity: int, grid_shape):
+        super().__init__(capacity=capacity)
+        self.size = 0
+        self.actions = torch.empty((capacity,), dtype=torch.long)
+        self.avg_rewards = torch.empty((capacity,), dtype=torch.float32)
+        self.grids = torch.empty((capacity, *grid_shape), dtype=torch.long)
+        self.animal_positions = torch.empty((capacity, 2), dtype=torch.long)
+
+    def append(self, action: torch.Tensor, world_state: dict, avg_reward: torch.Tensor):
+        if self.size >= self.capacity:
+            raise IndexError("SimulationResult capacity exceeded.")
+        self.actions[self.size] = action
+        self.avg_rewards[self.size] = avg_reward
+        self.grids[self.size] = world_state["grid"]
+        self.animal_positions[self.size] = world_state["animal_pos"]
+        self.size += 1
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, idx):
+        return {
+            "action": self.actions[idx],
+            "grid": self.grids[idx],
+            "animal_pos": self.animal_positions[idx],
+            "avg_reward": self.avg_rewards[idx]
+        }
 
 
 # ------------------ SANITY CHECK ------------------ #

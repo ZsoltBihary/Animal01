@@ -1,7 +1,7 @@
 # import torch
 from torch import Tensor
 import torch.nn as nn
-from nn_model.custom_layers import SparseLinear
+from for_later.custom_layers import SparseLinear
 
 
 class BrainModel(nn.Module):

@@ -3,6 +3,7 @@
 # import torch
 from torch import Tensor
 
+# === SIMPLE TENSOR REPRESENTATION ===
 # For now, all types are simply Tensor ...
 Observation = Tensor
 State = Tensor

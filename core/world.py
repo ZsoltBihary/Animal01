@@ -21,6 +21,9 @@ class World(ABC):
     #   reward: Tensor (B, )
 
     @abstractmethod
+    def get_state(self) -> dict: ...
+
+    @abstractmethod
     def zero_action(self) -> Action: ...
 
     @abstractmethod
