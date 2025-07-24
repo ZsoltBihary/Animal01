@@ -11,9 +11,9 @@ class GridRenderer:
     # Colors
     INVISIBLE = (0, 0, 0)
     VISIBLE = (15, 15, 15)
-    LINE = (63, 63, 63)
-    GREEN = (127, 255, 0)
-    RED = (191, 0, 0)
+    LINE = (31, 31, 31)
+    GREEN = (31, 255, 0)
+    RED = (255, 0, 0)
     BLUE = (63, 63, 255)
 
     def __init__(self, world: GridWorld, cell_size=64, egocentric=False):
@@ -28,9 +28,8 @@ class GridRenderer:
         self.draw_width = self.W * self.cell_size
         self.draw_height = self.H * self.cell_size
         self.total_width = round_up_16(self.draw_width + 2 * self.margin)
-        self.total_height = round_up_16(self.draw_height + 2 * self.margin) + 2 * self.cell_size
+        self.total_height = round_up_16(self.draw_height + 2 * self.margin + 2 * self.cell_size)
         # We want some blank space in the bottom
-
         self.screen = None
 
     def draw_snapshot(self, grid: torch.Tensor, animal_pos: torch.Tensor, egocentric: bool = None):
@@ -72,10 +71,12 @@ class GridRenderer:
         offset = self.margin
         for x in range(self.W + 1):
             x_pos = offset + x * self.cell_size
-            pygame.draw.line(self.screen, self.LINE, (x_pos, offset), (x_pos, offset + self.draw_height))
+            pygame.draw.line(self.screen, self.LINE, width=3,
+                             start_pos=(x_pos, offset), end_pos=(x_pos, offset + self.draw_height))
         for y in range(self.H + 1):
             y_pos = offset + y * self.cell_size
-            pygame.draw.line(self.screen, self.LINE, (offset, y_pos), (offset + self.draw_width, y_pos))
+            pygame.draw.line(self.screen, self.LINE, width=3,
+                             start_pos=(offset, y_pos), end_pos=(offset + self.draw_width, y_pos))
 
     def draw(self, grid: torch.Tensor, animal_pos: torch.Tensor):
         self.init_screen()
@@ -94,7 +95,7 @@ class GridRenderer:
                     self.cell_size
                 )
                 if val == FOOD:
-                    pygame.draw.circle(self.screen, self.GREEN, rect.center, self.cell_size // 5)
+                    pygame.draw.circle(self.screen, self.GREEN, rect.center, self.cell_size // 4)
                 elif val == POISON:
                     pygame.draw.rect(self.screen, self.RED,
                                      rect.inflate(-2*self.cell_size // 3, -2*self.cell_size // 3))

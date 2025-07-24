@@ -1,7 +1,9 @@
 # Animal Project
 
 ## General Goal
-To understand basic **Reinforcement Learning (RL)** concepts through a concrete, simple example. Implement a simple environment and a decision-making agent that interacts with the environment, performs actions, and receives rewards.
+To understand basic **Reinforcement Learning (RL)** concepts through a concrete, simple example. 
+Implement a simple environment and a decision-making agent that interacts with the environment, 
+performs actions, and receives rewards.
 
 ---
 
@@ -18,14 +20,46 @@ To understand basic **Reinforcement Learning (RL)** concepts through a concrete,
 ### Agent ("Animal")
 
 - **Actions**: `STAY`, `UP`, `DOWN`, `LEFT`, `RIGHT` (5 possible actions)
-- **Decision model ("Brain")**: Based on the Q(s, a) action-value function.
+- **Decision model**: Based on the Q(s, a) action-value function.
 - **Decision algorithm**:
-  - Given a state `s`, use the Q-function to obtain the 5 q(s, a) values.
-  - Generate policy probabilities via **softmax** (with very low temperature).
-  - Select an action according to the policy (balances resolution between near-equal Q-values).
+  - Given a state `s`, use the Q-function to obtain the 5 q_a(s) values.
+  - Generate policy probabilities via **softmax** (with low temperature).
+  - Select an action according to the policy (temperature balances decision between near-equal q_a values).
   - During rollout, combine this with ε-uniform random exploration.
 
-### Environment ("Terrain")
+---
+
+### Animal Taxonomy
+
+```
+Animal
+├── Protozoan          ← includes agents that can act, but cannot learn
+│   ├── * Sponge
+│   └── * Amoeba
+└── Metazoan           ← includes all Q-learning-capable agents
+    ├── Arthropod      ← includes stateless Q-learning-capable agents
+    │   └── * Insect
+    └── Vertebrate     ← includes memory/state-based Q-learning-capable agents
+        ├── * Reptile
+        └── * Mammal
+```
+
+This taxonomy hierarchy is implemented as abstract and derived classes. They represent not only biological,
+but also algorithmic differences. Here is a detailed breakdown for the leaf classes:
+
+| Class       | Behavior Description                                                                                                                                              |
+|-------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Sponge**  | `action = STAY` — trivial                                                                                                                                         |
+| **Amoeba**  | `action = random_action` — random benchmark                                                                                                                       |
+| **Insect**  | `state = encode(observation)`<br/>`q_a = Q_model(state)`<br/>`action = select(q_a)` — reactive; no internal brain state, no memory                                |
+| **Reptile** | `brain_state = imprint(brain_state, observation)`<br>`q_a, brain_state = Q_model(brain_state)`<br/>`action = select(q_a)` — thinking; has brain state, and memory |
+| **Mammal**  | Same as Reptile, but with hard-wired architecture                                                                                                                 |
+| **Human**   | Internally simulates the world.<br>If rules are known → **AlphaZero**.<br>If rules are learned → **MuZero**                                                       |
+
+💡 **Focus for now**: Implement **Amoeba** (benchmark) and **Insect**. Reptile support may be considered in the interface.
+
+
+### Environment ("Grid")
 
 ```
  ------------------------------
@@ -39,38 +73,24 @@ To understand basic **Reinforcement Learning (RL)** concepts through a concrete,
  ------------------------------
 ```
 
-- A rectangular grid (H × W) with 3 types of cells:
+- A rectangular grid (H × W) with 4 types of cells:
   - `EMPTY`
   - `FOOD`
   - `POISON`
-- The animal's position is tracked.
+  - `ANIMAL`
+- The animal's position is also tracked.
 - **Observation**: A square window of size (K × K), centered on the animal.
 - **Action resolution**:
   - Animal moves according to the action (with **periodic boundary conditions**).
   - Rewards are given as defined below.
-  - Consumed FOOD or POISON is regenerated randomly on an EMPTY cell far from the animal.
+  - Consumed FOOD or POISON is regenerated randomly far from the animal, to keep their density roughly constant.
 
 ### Reward Rules
 
 - Every action except `STAY`: **−1**
 - Landing on `FOOD`: **+100**
 - Landing on `POISON`: **−100**
-- Reward is **normalized** with `(1 - γ)` (see literature).
-
----
-
-## Animal / Brain Types
-
-| Type     | Behavior Description |
-|----------|----------------------|
-| **Sponge** | `action = STAY` |
-| **Amoeba** | `action = random_action` |
-| **Insect** | `action = act(observation)` — stateless, reactive |
-| **Reptile** | `brain_state = observe(brain_state, observation)`<br>`action = act(brain_state)` — has memory |
-| **Mammal** | Same as Reptile, but with hard-wired architecture for memory/preprocessing |
-| **Human** | Internally simulates the world.<br>If rules are known → **AlphaZero**.<br>If rules are learned → **MuZero** |
-
-💡 **Focus for now**: Implement **Amoeba** (benchmark) and **Insect**. Reptile support may be considered in the interface.
+- Reward is **normalized** with `(1 - γ)`, so integrated reward/step is on the same scale as the per step rewards.
 
 ---
 
@@ -97,14 +117,14 @@ To understand basic **Reinforcement Learning (RL)** concepts through a concrete,
 ### Practical Deep Q-Learning Training Strategy
 
 - **Rollout policy**: Based on the `Q_online` model
-- **Experience buffer**: Stores `(state, action, TD-target)` tuples during rollout
+- **Replay buffer**: Stores `(state, action, q_target)` tuples during rollout
 - **Training**:
+  - Can be moved to GPU
   - Performed asynchronously or periodically, decoupled from rollout
-  - Only a few epochs per batch (e.g. 1–4), depending on throughput
   - Uses buffered data with standard TD loss:  
   L = (Q_online(s, a; θ) − y)², where  
-  y = r + γ * maxₐ′ Q_target(s′, a′)
-- **Q_target update**: Occasional hard or soft copy of `Q` to `Q_target`
+  y = r + γ * max_a' (Q_target(s′, a′))
+- **Q_target update**: Occasional hard or soft copy of `Q_online` to `Q_target`
 - **Parallel rollout**: Hundreds of environment instances generate rollouts concurrently for high throughput
 
 ---

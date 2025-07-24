@@ -15,19 +15,19 @@ video_path = subfolder / "roach03.mp4"
 
 # Build up a grid world, with an insect.
 B = 128
-H = 11
-W = 15
-R = 2
+H = 17
+W = 23
+R = 3
 food_r = 100.0
 poison_r = -50.0
 move_r = -1.0
 food_d = 0.05
-poison_d = 0.25
+poison_d = 0.3
 # Other specs
-num_episodes = 30
-steps_per_episode = 100
-video_steps = 100
-buffer_capacity = int(steps_per_episode * B * 2.5)
+num_episodes = 20
+steps_per_episode = 200
+video_steps = 200
+buffer_capacity = int(steps_per_episode * B * 1.5)
 trainer_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # trainer_device = torch.device("cpu")
 
@@ -61,7 +61,7 @@ print("Running simulation with the trained insect ...")  # =====================
 sim_insect.run(n_steps=video_steps)
 # Now we have a record of the simulation in sim_result  # TODO: Make result construction dynamic
 print("Constructing GridRenderer ...")  # =================================
-renderer = GridRenderer(world=world)
+renderer = GridRenderer(world=world, cell_size=32)
 # renderer.play_simulation(result=sim_result, delay_ms=300)
 print("Animating simulation  ...")  # =================================
 renderer.save_as_video(result=sim_result, video_path=video_path)
