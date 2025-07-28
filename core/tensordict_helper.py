@@ -1,22 +1,67 @@
 # from abc import ABC, abstractmethod
 # from typing import Union, Self
-# import torch
+import torch
 from torch import Tensor
+from tensordict import TensorDict
+# from torch import nn
+# from torchinfo import summary
 
-# === SIMPLE TENSOR REPRESENTATION ===
-# For now, all types are simply Tensor ...
-Observation = Tensor
-State = Tensor
+Observation = TensorDict
+State = TensorDict
 Action = Tensor
+Schema = dict[str, tuple[torch.Size, torch.dtype]]
+
+
+# def tensordict_zero(schema: dict[str, torch.Size], batch_size: int, device="cpu"):
+#     """Create a TensorDict of zeros based on schema."""
+#     return TensorDict(
+#         {k: torch.zeros((batch_size, *shape), device=device) for k, shape in schema.items()},
+#         batch_size=[batch_size],
+#         device=device
+#     )
+
+#
+# def summary_tensordict(model: nn.Module, schema: dict[str, torch.Size], batch_size: int, device="cpu",
+#                        **summary_kwargs):
+#     """
+#     Wraps a model that takes a TensorDict as input so torchinfo.summary can work.
+#
+#     Args:
+#         model: nn.Module, expects TensorDict as input.
+#         schema: dict mapping field names -> torch.Size (without batch dim).
+#         batch_size: int, batch size to use for dummy input.
+#         device: str or torch.device, device for dummy input.
+#         summary_kwargs: extra kwargs passed to torchinfo.summary (e.g., depth, verbose).
+#     """
+#     class SummaryWrapper(nn.Module):
+#         def __init__(self, model, schema, batch_size, device):
+#             super().__init__()
+#             self.model = model
+#             self.schema = schema
+#             self.batch_size = batch_size
+#             self.device = device
+#
+#         def forward(self, **kwargs):
+#             # Convert dict back to TensorDict
+#             td = TensorDict(kwargs, batch_size=[self.batch_size], device=self.device)
+#             return self.model(td)
+#
+#     wrapped_model = SummaryWrapper(model, schema, batch_size, device)
+#
+#     # Create dummy dict for torchinfo
+#     dummy_dict = {k: torch.zeros((batch_size, *shape), device=device) for k, shape in schema.items()}
+#
+#     return summary(wrapped_model, input_data=dummy_dict, **summary_kwargs)
+#
 
 # ---------------------------
 # General batching utilities
 # ---------------------------
 
-# BatchIndex = Union[slice, torch.Tensor]
+# BatchIndex = Union[slice, Tensor]
 
 
-# noinspection PyArgumentList
+# # noinspection PyArgumentList
 # class TensorBatchMixin(ABC):
 #     @abstractmethod
 #     def _tensor_fields(self) -> list[str]:
@@ -30,29 +75,29 @@ Action = Tensor
 #     def __setitem__(self, index: BatchIndex, value: Self) -> None:
 #         for k in self._tensor_fields():
 #             getattr(self, k)[index] = getattr(value, k)
-
-
+#
+#
 # class State(TensorBatchMixin, ABC):
 #     """Base class for agent's internal state."""
 #     pass
-
-
+#
+#
 # class Action(TensorBatchMixin, ABC):
 #     """Base class for actions taken by agent."""
 #     pass
-
-
+#
+#
 # class Observation(TensorBatchMixin, ABC):
 #     """Base class for environmental feedback to agent."""
 #     pass
-
-# ---------------------------------
-# Concrete implementation examples
-# ---------------------------------
-
-
+#
+# # ---------------------------------
+# # Concrete implementation examples
+# # ---------------------------------
+#
+#
 # class InsectStateExample(State):
-#     def __init__(self, smell: torch.Tensor, hunger: torch.Tensor):
+#     def __init__(self, smell: Tensor, hunger: Tensor):
 #         self.smell = smell
 #         self.hunger = hunger
 #
@@ -61,10 +106,10 @@ Action = Tensor
 #
 #     def __repr__(self):
 #         return f"InsectStateExample(smell={self.smell}, hunger={self.hunger})"
-
-
+#
+#
 # class GridAction(Action):
-#     def __init__(self, direction: torch.Tensor):
+#     def __init__(self, direction: Tensor):
 #         self.direction = direction
 #
 #     def _tensor_fields(self) -> list[str]:
@@ -72,10 +117,10 @@ Action = Tensor
 #
 #     def __repr__(self):
 #         return f"GridAction(direction={self.direction})"
-
-
+#
+#
 # class GridObservationExample(Observation):
-#     def __init__(self, image: torch.Tensor, scent: torch.Tensor):
+#     def __init__(self, image: Tensor, scent: Tensor):
 #         self.image = image
 #         self.scent = scent
 #
@@ -84,12 +129,12 @@ Action = Tensor
 #
 #     def __repr__(self):
 #         return f"GridObservationExample(image={self.image}, scent={self.scent})"
-
-
-# ---------------------------
-# Sanity check
-# ---------------------------
-
+#
+#
+# # ---------------------------
+# # Sanity check
+# # ---------------------------
+#
 # def demo():
 #     B = 4  # batch size
 #

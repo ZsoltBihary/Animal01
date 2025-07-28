@@ -122,8 +122,9 @@ but also algorithmic differences. Here is a detailed breakdown for the leaf clas
   - Can be moved to GPU
   - Performed asynchronously or periodically, decoupled from rollout
   - Uses buffered data with standard TD loss:  
-  L = (Q_online(s, a; θ) − y)², where  
-  y = r + γ * max_a' (Q_target(s′, a′))
+  L = (Q_online(s, a; θ) − q_target)², where  
+  q_target = r + γ * max_a' (Q_target(s′, a′)) had been calculated during rollout, and stored in the replay buffer
+  - The a' `selection` is based on Q_online, the max_a' `value` is based on Q_target
 - **Q_target update**: Occasional hard or soft copy of `Q_online` to `Q_target`
 - **Parallel rollout**: Hundreds of environment instances generate rollouts concurrently for high throughput
 

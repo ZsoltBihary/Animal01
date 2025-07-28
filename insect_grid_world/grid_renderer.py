@@ -16,11 +16,12 @@ class GridRenderer:
     RED = (255, 0, 0)
     BLUE = (63, 63, 255)
 
-    def __init__(self, world: GridWorld, cell_size=64, egocentric=False):
+    def __init__(self, world: GridWorld, text_info: dict, cell_size=64, egocentric=False):
         pygame.init()
         self.H = world.H
         self.W = world.W
         self.R = world.R
+        self.text_info = text_info
         self.cell_size = cell_size
         self.egocentric = egocentric
 
@@ -28,7 +29,7 @@ class GridRenderer:
         self.draw_width = self.W * self.cell_size
         self.draw_height = self.H * self.cell_size
         self.total_width = round_up_16(self.draw_width + 2 * self.margin)
-        self.total_height = round_up_16(self.draw_height + 2 * self.margin + 2 * self.cell_size)
+        self.total_height = round_up_16(self.draw_height + 2 * self.margin + 3 * self.cell_size)
         # We want some blank space in the bottom
         self.screen = None
 
@@ -113,7 +114,49 @@ class GridRenderer:
         else:
             pygame.draw.circle(self.screen, self.VISIBLE, (int(center_x), int(center_y)), self.cell_size // 6)
 
+        # Draw text
+        self.draw_text()
         pygame.display.flip()
+
+    def draw_text(self):
+
+        font = pygame.font.Font(None, size=2*self.cell_size // 3)  # Default font, size 36
+
+        # Split the keys into three groups
+        left_keys = ["Animal", "Model", "Temperature"]
+        center_keys = ["Food_reward", "Poison_reward", "Move_reward"]
+        right_keys = ["Food_density", "Poison_density", "Mean_reward"]
+
+        # Starting positions
+        left_x = self.margin + self.cell_size // 2
+        center_x = left_x + 7 * self.cell_size  # adjust for spacing
+        right_x = center_x + 6 * self.cell_size  # adjust for spacing
+        start_y = self.draw_height + self.cell_size + self.cell_size // 2
+        line_height = self.cell_size
+
+        # Draw left column
+        y = start_y
+        for key in left_keys:
+            if key in self.text_info:
+                text_surface = font.render(f"{key}: {self.text_info[key]}", True, (255, 255, 255))
+                self.screen.blit(text_surface, (left_x, y))
+                y += line_height
+
+        # Draw center column
+        y = start_y
+        for key in center_keys:
+            if key in self.text_info:
+                text_surface = font.render(f"{key}: {self.text_info[key]}", True, (255, 255, 255))
+                self.screen.blit(text_surface, (center_x, y))
+                y += line_height
+
+        # Draw right column
+        y = start_y
+        for key in right_keys:
+            if key in self.text_info:
+                text_surface = font.render(f"{key}: {self.text_info[key]}", True, (255, 255, 255))
+                self.screen.blit(text_surface, (right_x, y))
+                y += line_height
 
     def draw_egocentric(self, grid: torch.Tensor, animal_pos: torch.Tensor):
         H, W = self.H, self.W

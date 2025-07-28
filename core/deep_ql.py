@@ -27,7 +27,7 @@ class DeepQLearning:
         self.num_episodes = num_episodes
         self.steps_per_episode = steps_per_episode
 
-        self.buffer = ReplayBuffer(capacity=buffer_capacity, state_shape=animal.state_shape[1:])  # remove batch dim
+        self.buffer = ReplayBuffer(capacity=buffer_capacity, state_schema=animal.state_schema)
         # Make a clone of animal.model for double deep learning.
         self.target_model = copy.deepcopy(self.animal.model)
         self.target_model.eval()  # This is the target Q model, needs to be always in eval() mode

@@ -16,50 +16,33 @@ from torch import Tensor
 import torch.nn.functional as F
 from abc import ABC, abstractmethod
 from core.q_model import MetazoanQModel  # , VertebrateQModel
-from core.types import Observation, State, Action
+from core.tensordict_helper import Schema, Observation, State, Action
 
 
 # === Base Animal Class ===
 class Animal(ABC):
-    def __init__(self, observation_shape: tuple[int, ...], num_actions: int):
-        self.observation_shape = observation_shape
+    def __init__(self, observation_schema: Schema, num_actions: int):
+        self.observation_schema = observation_schema
         self.num_actions = num_actions
 
     @abstractmethod
     def act(self, observation: Observation = None) -> Action: ...
 
-# # === Protozoans (can not learn, only act) ===
-# class Protozoan(Animal, ABC):
-#     def __init__(self, num_actions: int):
-#
-#
-# class Sponge(Protozoan):
-#     def act(self, observation=None):
-#         # B = observation.shape[0]
-#         action = torch.zeros(self.B, dtype=torch.long)
-#         return action
-#
-#
-# class Amoeba(Protozoan):
-#     def act(self, observation=None):
-#
-#         B = observation.shape[0]
-#         action = torch.randint(low=0, high=self.A, size=(B,))
-#         return action
-
 
 # === Metazoans (can learn) ===
 class Metazoan(Animal, ABC):
-    state_shape: tuple
-
-    def __init__(self, observation_shape: tuple[int, ...], state_shape: tuple[int, ...], num_actions: int,
+    def __init__(self,
+                 observation_schema: Schema,
+                 state_schema: Schema,
+                 num_actions: int,
                  model: MetazoanQModel,
-                 epsilon=0.1, temperature=0.1):
-        super().__init__(observation_shape=observation_shape, num_actions=num_actions)
-        self.state_shape = state_shape
+                 epsilon: float, temperature: float
+                 ):
+        super().__init__(observation_schema=observation_schema, num_actions=num_actions)
+        self.state_schema = state_schema
         self.model = model
-        self.epsilon = epsilon          # used in epsilon-greedy action selection
-        self.temperature = temperature  # used in logits for random policy
+        self.epsilon = epsilon
+        self.temperature = temperature
 
     @abstractmethod
     def perceive(self, observation: Observation) -> State: ...
@@ -99,20 +82,41 @@ class Arthropod(Metazoan, ABC):
         return q_values
 
 
-# === Vertebrates (can learn, have brain state) ===
-class Vertebrate(Metazoan, ABC):
-    brain_state: State
+# TODO: Deal with Vertebrate class later
+# # === Vertebrates (can learn, have brain state) ===
+# class Vertebrate(Metazoan, ABC):
+#     brain_state: State
+#
+#     @abstractmethod
+#     def imprint(self, observation: Observation): ...
+#     # modifies self.brain_state in-place
+#
+#     def perceive(self, observation: Observation) -> State:
+#         self.imprint(observation)
+#         state = self.brain_state
+#         return state
+#
+#     def estimate_q(self, state: State) -> Tensor:
+#         q_values, new_state = self.model.Q_and_update(state)
+#         self.brain_state = new_state
+#         return q_values
 
-    @abstractmethod
-    def imprint(self, observation: Observation): ...
-    # modifies self.brain_state in-place
-
-    def perceive(self, observation: Observation) -> State:
-        self.imprint(observation)
-        state = self.brain_state
-        return state
-
-    def estimate_q(self, state: State) -> Tensor:
-        q_values, new_state = self.model.Q_and_update(state)
-        self.brain_state = new_state
-        return q_values
+# # Some other classes ...
+# # === Protozoans (can not learn, only act) ===
+# class Protozoan(Animal, ABC):
+#     def __init__(self, num_actions: int):
+#
+#
+# class Sponge(Protozoan):
+#     def act(self, observation=None):
+#         # B = observation.shape[0]
+#         action = torch.zeros(self.B, dtype=torch.long)
+#         return action
+#
+#
+# class Amoeba(Protozoan):
+#     def act(self, observation=None):
+#
+#         B = observation.shape[0]
+#         action = torch.randint(low=0, high=self.A, size=(B,))
+#         return action

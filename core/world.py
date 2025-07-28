@@ -5,7 +5,7 @@ from torch import Tensor
 # from core.terrain import Terrain
 # from utils.helper import print_grid, ACTION_STR
 from abc import ABC, abstractmethod
-from core.types import Observation, Action
+from core.tensordict_helper import Observation, Action
 
 
 class World(ABC):
@@ -15,9 +15,9 @@ class World(ABC):
     @abstractmethod
     def resolve_action(self, action: Action) -> tuple[Observation, Tensor]: ...
     # Input
-    #   action: Action (B, ...)
+    #   action: Action: Tensor(B, )
     # Output
-    #   observation: Observation (B, ...)
+    #   observation: Observation: TensorDict(B, ...)
     #   reward: Tensor (B, )
 
     @abstractmethod
