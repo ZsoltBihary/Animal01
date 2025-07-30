@@ -4,20 +4,33 @@ import numpy as np
 import imageio.v2 as imageio
 from grid_world import GridWorld
 
-EMPTY, FOOD, POISON = 0, 1, 2
+# EMPTY, FOOD, POISON = 0, 1, 2
+EMPTY, FOOD, BAR1, BAR2, BAR3, BAR4, BAR5, ANIMAL = 0, 1, 2, 3, 4, 5, 6, 7
 
 
 class GridRenderer:
     # Colors
     INVISIBLE = (0, 0, 0)
-    VISIBLE = (15, 15, 15)
+    VISIBLE = (15, 15, 19)
     LINE = (31, 31, 31)
-    GREEN = (31, 255, 0)
-    RED = (255, 0, 0)
-    BLUE = (63, 63, 255)
+    # EMPTY, FOOD, BAR1, BAR2, BAR3, BAR4, BAR5, ANIMAL = 0, 1, 2, 3, 4, 5, 6, 7
+    COLOR = [VISIBLE,  # EMPTY
+             (0, 255, 0),  # FOOD
+             (55, 0, 0),   # BAR1
+             (105, 0, 0),  # BAR2
+             (155, 0, 0),  # BAR3
+             (205, 0, 0),  # BAR4
+             (255, 0, 0),  # BAR5
+             (128, 128, 255)
+             ]
 
-    def __init__(self, world: GridWorld, text_info: dict, cell_size=64, egocentric=False):
+    # GREEN = (31, 255, 0)
+    # RED = (255, 0, 0)
+    # BLUE = (63, 63, 255)
+
+    def __init__(self, world: GridWorld, text_info: dict, cell_size=63, egocentric=False):
         pygame.init()
+
         self.H = world.H
         self.W = world.W
         self.R = world.R
@@ -88,7 +101,8 @@ class GridRenderer:
 
         for y in range(self.H):
             for x in range(self.W):
-                val = grid[y, x]
+                val = grid[y, x].item()
+                col = self.COLOR[val]
                 rect = pygame.Rect(
                     self.margin + x * self.cell_size,
                     self.margin + y * self.cell_size,
@@ -96,23 +110,29 @@ class GridRenderer:
                     self.cell_size
                 )
                 if val == FOOD:
-                    pygame.draw.circle(self.screen, self.GREEN, rect.center, self.cell_size // 4)
-                elif val == POISON:
-                    pygame.draw.rect(self.screen, self.RED,
-                                     rect.inflate(-2*self.cell_size // 3, -2*self.cell_size // 3))
+                    pygame.draw.circle(self.screen, col, rect.center, self.cell_size // 4)
+                elif (val >= BAR1) & (val <= BAR5):
+                    pygame.draw.rect(self.screen, col,
+                                     rect.inflate(val-4-2*self.cell_size // 3, val-4-2*self.cell_size // 3))
 
         # Draw agent
-        val = grid[pos_y, pos_x]
         center_x = self.margin + (pos_x + 0.5) * self.cell_size
         center_y = self.margin + (pos_y + 0.5) * self.cell_size
-        pygame.draw.circle(self.screen, self.BLUE, (int(center_x), int(center_y)), self.cell_size // 3)
+        pygame.draw.circle(self.screen, self.COLOR[ANIMAL], (int(center_x), int(center_y)), self.cell_size // 3)
 
-        if val == FOOD:
-            pygame.draw.circle(self.screen, self.GREEN, (int(center_x), int(center_y)), self.cell_size // 6)
-        elif val == POISON:
-            pygame.draw.circle(self.screen, self.RED, (int(center_x), int(center_y)), self.cell_size // 6)
+        val = grid[pos_y, pos_x].item()
+        if val < ANIMAL:
+            col = self.COLOR[val]
         else:
-            pygame.draw.circle(self.screen, self.VISIBLE, (int(center_x), int(center_y)), self.cell_size // 6)
+            col = self.VISIBLE
+        pygame.draw.circle(self.screen, col, (int(center_x), int(center_y)), self.cell_size // 6)
+
+        # if val == FOOD:
+        #     pygame.draw.circle(self.screen, self.GREEN, (int(center_x), int(center_y)), self.cell_size // 6)
+        # elif val == POISON:
+        #     pygame.draw.circle(self.screen, self.RED, (int(center_x), int(center_y)), self.cell_size // 6)
+        # else:
+        #     pygame.draw.circle(self.screen, self.VISIBLE, (int(center_x), int(center_y)), self.cell_size // 6)
 
         # Draw text
         self.draw_text()
@@ -124,8 +144,8 @@ class GridRenderer:
 
         # Split the keys into three groups
         left_keys = ["Animal", "Model", "Temperature"]
-        center_keys = ["Food_reward", "Poison_reward", "Move_reward"]
-        right_keys = ["Food_density", "Poison_density", "Mean_reward"]
+        center_keys = ["Food_reward", "Max_bar_reward", "Move_reward"]
+        right_keys = ["Food_density", "Barrier_density", "Mean_reward"]
 
         # Starting positions
         left_x = self.margin + self.cell_size // 2

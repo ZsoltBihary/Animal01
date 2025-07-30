@@ -11,11 +11,10 @@ from core.tensordict_helper import Observation, Action
 class World(ABC):
     def __init__(self, B: int):
         self.B = B
+        self.last_action = self.zero_action()
 
     @abstractmethod
-    def resolve_action(self, action: Action) -> tuple[Observation, Tensor]: ...
-    # Input
-    #   action: Action: Tensor(B, )
+    def resolve_action(self) -> tuple[Observation, Tensor]: ...
     # Output
     #   observation: Observation: TensorDict(B, ...)
     #   reward: Tensor (B, )
@@ -31,5 +30,5 @@ class World(ABC):
     # Print world state
 
     @abstractmethod
-    def print_action_reward(self, action: Action, reward: Tensor) -> None: ...
-    # Print action and reward
+    def print_action_reward(self, reward: Tensor) -> None: ...
+    # Print world.last_action and reward

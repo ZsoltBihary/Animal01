@@ -9,7 +9,7 @@ from custom_layers import ResTowerSeparable
 class InsectQModel02(MetazoanQModel):
 
     def __init__(self, state_schema: Schema, num_actions: int,
-                 main_channels=32, hid_channels=16, kernel_size=3, num_blocks=3
+                 main_channels=16, hid_channels=8, kernel_size=3, num_blocks=5
                  ):
 
         super().__init__(state_schema=state_schema, num_actions=num_actions)
@@ -46,7 +46,7 @@ class DuelingHeadConv(nn.Module):
         """
         """
         super().__init__()
-        head_channels = 4
+        head_channels = 2
 
         # === Value stream: outputs a scalar V ===
         self.conv_val = nn.Conv2d(in_channels=main_channels, out_channels=head_channels,
@@ -98,13 +98,13 @@ if __name__ == "__main__":
 
     # Define dummy input shape
     B = 128               # Batch size
-    C = 8                 # Input channels (e.g., 4-plane board state)
+    C = 12                 # Input channels (e.g., 4-plane board state)
     K1 = K2 = 7           # Spatial size (e.g., 7x7 board)
     A = 5                 # Number of actions (output Q-values)
-    main_ch = 32
-    hid_ch = 16
+    main_ch = 16
+    hid_ch = 8
     kern = 3
-    num_bl = 3
+    num_bl = 5
 
     state_schema = {
         "x": (torch.Size([C, K1, K2]), torch.float32)

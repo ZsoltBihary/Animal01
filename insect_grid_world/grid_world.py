@@ -1,10 +1,6 @@
 import torch
 from torch import Tensor
 from tensordict import TensorDict
-# from typing import Self
-# from utils.helper import EMPTY, FOOD, POISON, ANIMAL, FOOD_REWARD, POISON_REWARD, MOVE_REWARD
-# from utils.helper import STAY, C
-# from utils.helper import ResolveMove, print_grid, periodic_distance
 from core.world import World
 from core.simulator import SimulationResult
 from core.tensordict_helper import Observation, Action
@@ -13,9 +9,11 @@ import torch.nn.functional as F
 
 class GridWorld(World):
     # Cell types
-    EMPTY, FOOD, POISON, ANIMAL = 0, 1, 2, 3
-    num_cell = 3  # number of observable cell types (w/o ANIMAL)
-    CELL_STR = {EMPTY: '   ', FOOD: ' o ', POISON: ' x ', ANIMAL: '(A)'}
+    EMPTY, FOOD, BAR1, BAR2, BAR3, BAR4, BAR5, ANIMAL = 0, 1, 2, 3, 4, 5, 6, 7
+    num_cell = 7  # number of observable cell types (w/o ANIMAL)
+    CELL_STR = {EMPTY: '   ', FOOD: ' o ',
+                BAR1: ' x ', BAR2: ' x ', BAR3: ' x ', BAR4: ' X ', BAR5: ' X ',
+                ANIMAL: '(A)'}
 
     # Actions
     STAY, UP, DOWN, LEFT, RIGHT = 0, 1, 2, 3, 4
@@ -30,21 +28,29 @@ class GridWorld(World):
     ACTION_STR = {STAY: 'STAY', UP: 'UP', DOWN: 'DOWN', LEFT: 'LEFT', RIGHT: 'RIGHT'}
 
     def __init__(self, B: int, H: int, W: int, R: int,
-                 food_reward: float, poison_reward: float, move_reward: float,
-                 food_density: float, poison_density: float):
-        super().__init__(B=B)  # batch size is declared in class World
+                 food_reward: float, bar_reward: float, move_reward: float,
+                 food_density: float, bar_density: float):
+        super().__init__(B=B)  # batch size was declared in class World
         self.H, self.W, self.R = H, W, R  # height, width, observation radius
         self.K = 2 * R + 1  # observation window size
 
-        # Rewards depend on the cell type the animal lands on:
-        # EMPTY: move_reward, FOOD: food_reward, POISON: poison_reward, ANIMAL (i.e., if action=STAY): 0.0
-        self.rewards = torch.tensor([move_reward,
-                                     food_reward + move_reward,
-                                     poison_reward + move_reward,
-                                     0.0])
-        self.food_density, self.poison_density = food_density, poison_density
-        empty_density = 1.0 - food_density - poison_density
-        self.target_count = torch.tensor([empty_density, food_density, poison_density]) * H * W
+        # Rewards depend on the cell type the animal moves to
+        self.rewards = torch.tensor([move_reward,                     # EMPTY
+                                     food_reward + move_reward,       # FOOD
+                                     0.2 * bar_reward + move_reward,  # BAR1
+                                     0.4 * bar_reward + move_reward,  # BAR2
+                                     0.6 * bar_reward + move_reward,  # BAR3
+                                     0.8 * bar_reward + move_reward,  # BAR4
+                                     1.0 * bar_reward + move_reward,  # BAR5
+                                     0.0])                            # ANIMAL - no move
+        self.food_density, self.bar_density = food_density, bar_density
+        empty_density = 1.0 - food_density - bar_density
+        self.target_count = torch.tensor([empty_density, food_density,
+                                          0.2 * bar_density,
+                                          0.2 * bar_density,
+                                          0.2 * bar_density,
+                                          0.2 * bar_density,
+                                          0.2 * bar_density,]) * H * W
 
         self.grid, self.animal_pos = self.random_start()
 
@@ -52,10 +58,11 @@ class GridWorld(World):
         """ Return batched random grids, batched animal_positions """
         # Initialize with EMPTY cells
         grid = torch.full((self.B, self.H, self.W), self.EMPTY, dtype=torch.long)  # (B, H, W)
-        # Assign FOOD and POISON
+        # Assign FOOD and BARRIER
         rand_vals = torch.rand((self.B, self.H, self.W))
-        grid[rand_vals < self.poison_density] = self.POISON
-        grid[(rand_vals >= self.poison_density) & (rand_vals < self.poison_density + self.food_density)] = self.FOOD
+        rand_bar_index = torch.randint_like(rand_vals, low=self.BAR1, high=self.BAR5+1, dtype=torch.long)
+        grid[rand_vals < self.bar_density] = rand_bar_index[rand_vals < self.bar_density]
+        grid[(rand_vals >= self.bar_density) & (rand_vals < self.bar_density + self.food_density)] = self.FOOD
         # Assign random animal positions
         y = torch.randint(0, self.H, (self.B,))
         x = torch.randint(0, self.W, (self.B,))
@@ -68,10 +75,8 @@ class GridWorld(World):
         action = torch.full(size=(self.B, ), fill_value=self.STAY)
         return action
 
-    def resolve_action(self, action: Action) -> tuple[Observation, Tensor]:
+    def resolve_action(self) -> tuple[Observation, Tensor]:
         """
-        Args:
-            action: Tensor (B,)
         Returns:
             observation: Observation: TensorDict
                             "image": Tensor (B, K, K)
@@ -81,7 +86,7 @@ class GridWorld(World):
         # Determine animal's new position
         batch_idx = torch.arange(self.B)
         old_pos = self.animal_pos                   # (B, 2)
-        new_pos = old_pos + self.delta_pos[action]  # (B, 2)
+        new_pos = old_pos + self.delta_pos[self.last_action]  # (B, 2)
         new_pos[:, 0] %= self.H  # wrap y
         new_pos[:, 1] %= self.W  # wrap x
         # Gather cell types at new position, give reward
@@ -97,11 +102,11 @@ class GridWorld(World):
         self.step()
 
         image = self.get_image()
-        last_action = action
+
         observation = TensorDict(
             source={
                 "image": image,
-                "last_action": last_action  # shape (B,) is fine
+                "last_action": self.last_action  # shape (B,) is fine
             },
             batch_size=[self.B]
         )
@@ -170,8 +175,9 @@ class GridWorld(World):
             print("│" + row_string + "│")
         print(horizontal)
 
-    def print_action_reward(self, action: Action, reward: Tensor) -> None:
-        print("Action:", self.ACTION_STR[action[0].item()], "  Reward:", reward[0].item())
+    def print_action_reward(self, reward: Tensor) -> None:
+        print("Action:", self.ACTION_STR[self.last_action[0].item()],
+              "  Reward:", reward[0].item())
 
     def get_state(self) -> dict:
         return {
@@ -219,13 +225,13 @@ class GridSimulationResult(SimulationResult):
 # ------------------ SANITY CHECK ------------------ #
 if __name__ == "__main__":
     world = GridWorld(B=3, H=6, W=11, R=2,
-                      food_reward=100.0, poison_reward=-100.0, move_reward=-1.0,
-                      food_density=0.1, poison_density=0.2)
+                      food_reward=100.0, bar_reward=-100.0, move_reward=-1.0,
+                      food_density=0.1, bar_density=0.6)
     # kitchen = Terrain.random(B=3, H=7, W=11, R=2,
     #                          food_density=0.1, poison_density=0.1)
     world.print_world()
     for _ in range(10):
-        action = torch.ones(world.B, dtype=torch.long) * 3
-        observation, reward = world.resolve_action(action)
-        world.print_action_reward(action, reward)
+        world.last_action = torch.ones(world.B, dtype=torch.long) * 3
+        observation, reward = world.resolve_action()
+        world.print_action_reward(reward)
         world.print_world()

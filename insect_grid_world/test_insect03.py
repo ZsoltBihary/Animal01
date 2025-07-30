@@ -10,31 +10,31 @@ from pathlib import Path
 # Define subfolder and filename
 subfolder = Path("animations")
 subfolder.mkdir(parents=True, exist_ok=True)  # Make sure the folder exists
-video_path = subfolder / "roach09.mp4"
+video_path = subfolder / "roach10.mp4"
 
 # Build up a grid world, with an insect.
 B = 256
 H = 15
-W = 21
+W = 23
 R = 3
 food_r = 100.0
-poison_r = -100.0
+bar_r = -100.0
 move_r = -1.0
-food_d = 0.02
-poison_d = 0.3
+food_d = 0.03
+bar_d = 0.3
 # Other specs
-num_episodes = 40
-steps_per_episode = 100
+num_episodes = 5
+steps_per_episode = 32
 video_steps = 200
-epsilon, temperature = 0.1, 0.05
-buffer_capacity = int(steps_per_episode * B * 1.2)
+epsilon, temperature = 0.05, 0.02
+buffer_capacity = int(steps_per_episode * B * 2.5)
 trainer_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # trainer_device = torch.device("cpu")
 
 print("Constructing GridWorld ...")  # =================================
 world = GridWorld(B=B, H=H, W=W, R=R,
-                  food_reward=food_r, poison_reward=poison_r, move_reward=move_r,
-                  food_density=food_d, poison_density=poison_d)
+                  food_reward=food_r, bar_reward=bar_r, move_reward=move_r,
+                  food_density=food_d, bar_density=bar_d)
 num_cell = world.num_cell
 num_actions = world.num_actions
 K = world.K
@@ -81,15 +81,15 @@ text_info = {
     "Model": model.__class__.__name__,
     "Temperature": f"{temperature:.2f}",
     "Food_reward": str(int(food_r)),
-    "Poison_reward": str(int(poison_r)),
+    "Max_bar_reward": str(int(bar_r)),
     "Move_reward": str(int(move_r)),
     "Food_density": f"{food_d:.2f}",
-    "Poison_density": f"{poison_d:.2f}",
+    "Barrier_density": f"{bar_d:.2f}",
     "Mean_reward": f"{sim_result.avg_rewards.mean().item():.1f}"
 }
 print(text_info)
 
-renderer = GridRenderer(world=world, text_info=text_info, cell_size=32)
+renderer = GridRenderer(world=world, text_info=text_info, cell_size=40)
 # renderer.play_simulation(result=sim_result, delay_ms=300)
 
 print("Animating simulation  ...")  # =================================

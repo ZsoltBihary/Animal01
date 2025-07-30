@@ -15,8 +15,8 @@ class Simulator:
         self.result = result
 
     def run(self, n_steps: int) -> None:
-        action = self.world.zero_action()
-        observation, _ = self.world.resolve_action(action)
+        # action = self.world.zero_action()
+        # observation, _ = self.world.resolve_action(action)
 
         if self.verbose >= 2:
             print("World at start:")
@@ -25,17 +25,23 @@ class Simulator:
             print("Simulation is starting ...")
 
         for t in range(n_steps):
-            action = self.animal.act(observation)
-            observation, reward = self.world.resolve_action(action)
+
+            observation, reward = self.world.resolve_action()
+
             if self.verbose >= 2:
                 print(t + 1, "/", n_steps)
             if self.verbose >= 2:
-                self.world.print_action_reward(action, reward)
+                self.world.print_action_reward(reward)
                 self.world.print_world()
 
             avg_reward = torch.mean(reward)
             world_state = self.world.get_state()
-            self.result.append(action=action[0], world_state=world_state, avg_reward=avg_reward)
+            self.result.append(action=self.world.last_action[0],
+                               world_state=world_state,
+                               avg_reward=avg_reward)
+
+            action = self.animal.act(observation)
+            self.world.last_action = action
 
         if self.verbose >= 1:
             print("Simulation ended.")

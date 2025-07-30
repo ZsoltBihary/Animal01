@@ -39,15 +39,16 @@ class DeepQLearning:
 
     @profile
     def rollout(self) -> float:
-        action = self.world.zero_action()
-        observation, _ = self.world.resolve_action(action)  # (B, K, K)
+        # action = self.world.zero_action()
+        observation, _ = self.world.resolve_action()  # (B, K, K)
         state = self.animal.perceive(observation)  # (B, C, K, K)
         q_values = self.animal.estimate_q(state)  # (B, A)
 
         sum_reward = 0.0
         for t in range(self.steps_per_episode):
             action = self.animal.select_action(q_values)  # (B, )
-            observation, reward = self.world.resolve_action(action)  # (B, )
+            self.world.last_action = action
+            observation, reward = self.world.resolve_action()  # (B, )
             # Get next state AFTER the environment responds
             next_state = self.animal.perceive(observation)  # (B, C, K, K)
             next_q_values = self.animal.estimate_q(next_state)  # (B, A)
