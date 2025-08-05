@@ -9,7 +9,7 @@ from custom_layers import ResTowerSeparable
 class InsectQModel02(MetazoanQModel):
 
     def __init__(self, state_schema: Schema, num_actions: int,
-                 main_channels=16, hid_channels=8, kernel_size=3, num_blocks=5
+                 main_channels=32, hid_channels=16, kernel_size=3, num_blocks=5
                  ):
 
         super().__init__(state_schema=state_schema, num_actions=num_actions)
@@ -101,27 +101,23 @@ if __name__ == "__main__":
     C = 12                 # Input channels (e.g., 4-plane board state)
     K1 = K2 = 7           # Spatial size (e.g., 7x7 board)
     A = 5                 # Number of actions (output Q-values)
-    main_ch = 16
-    hid_ch = 8
-    kern = 3
-    num_bl = 5
+    # main_ch = 32
+    # hid_ch = 16
+    # kern = 3
+    # num_bl = 5
 
     state_schema = {
         "x": (torch.Size([C, K1, K2]), torch.float32)
     }
 
-    # state_schema = {
-    #     "x": torch.Size([C, K1, K2])
-    # }
-
     # Instantiate model
     model = InsectQModel02(
         state_schema=state_schema,
         num_actions=A,
-        main_channels=main_ch,
-        hid_channels=hid_ch,
-        kernel_size=kern,
-        num_blocks=num_bl
+        # main_channels=main_ch,
+        # hid_channels=hid_ch,
+        # kernel_size=kern,
+        # num_blocks=num_bl
     )
 
     # Dummy input

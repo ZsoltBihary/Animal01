@@ -20,8 +20,8 @@ class QTrainer:
         q_model: torch.nn.Module,
         buffer: torch.utils.data.Dataset,
         device: torch.device,
-        batch_size: int = 32,
-        learning_rate: float = 1e-3,
+        batch_size: int,
+        learning_rate: float,
         optimizer: Optional[torch.optim.Optimizer] = None,
         loss_fn: Optional[Callable] = None
     ):
@@ -41,7 +41,7 @@ class QTrainer:
         self.device = device
         self.batch_size = batch_size
         self.optimizer = optimizer or torch.optim.Adam(self.model.parameters(), lr=learning_rate,
-                                                       weight_decay=0.001)
+                                                       weight_decay=0.0001)
         self.loss_fn = loss_fn or torch.nn.MSELoss()
 
     @profile
@@ -82,6 +82,12 @@ class QTrainer:
                 print(f"[Epoch {epoch + 1}/{epochs}] Avg Loss: {avg_loss:.4f}")
 
         return avg_loss
+
+    def set_learning_rate(self, new_lr):
+
+        print("Learning rate =", new_lr)
+        for param_group in self.optimizer.param_groups:
+            param_group["lr"] = new_lr
 
 
 # import torch

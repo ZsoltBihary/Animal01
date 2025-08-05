@@ -11,22 +11,27 @@ EMPTY, FOOD, BAR1, BAR2, BAR3, BAR4, BAR5, ANIMAL = 0, 1, 2, 3, 4, 5, 6, 7
 class GridRenderer:
     # Colors
     INVISIBLE = (0, 0, 0)
-    VISIBLE = (15, 15, 19)
+    VISIBLE = (15, 15, 15)
     LINE = (31, 31, 31)
     # EMPTY, FOOD, BAR1, BAR2, BAR3, BAR4, BAR5, ANIMAL = 0, 1, 2, 3, 4, 5, 6, 7
     COLOR = [VISIBLE,  # EMPTY
-             (0, 255, 0),  # FOOD
-             (55, 0, 0),   # BAR1
-             (105, 0, 0),  # BAR2
-             (155, 0, 0),  # BAR3
-             (205, 0, 0),  # BAR4
+             (0, 255, 15),  # FOOD
+             (55, 40, 0),  # BAR1
+             (105, 30, 0),  # BAR2
+             (155, 10, 0),  # BAR3
+             (205, 10, 0),  # BAR4
              (255, 0, 0),  # BAR5
-             (128, 128, 255)
+             (127, 127, 255)
              ]
-
-    # GREEN = (31, 255, 0)
-    # RED = (255, 0, 0)
-    # BLUE = (63, 63, 255)
+    # COLOR = [VISIBLE,  # EMPTY
+    #          (0, 255, 15),  # FOOD
+    #          (67, 60, 0),   # BAR1
+    #          (111, 45, 0),  # BAR2
+    #          (159, 30, 0),  # BAR3
+    #          (207, 15, 0),  # BAR4
+    #          (255, 0, 0),  # BAR5
+    #          (127, 127, 255)
+    #          ]
 
     def __init__(self, world: GridWorld, text_info: dict, cell_size=63, egocentric=False):
         pygame.init()
@@ -113,7 +118,7 @@ class GridRenderer:
                     pygame.draw.circle(self.screen, col, rect.center, self.cell_size // 4)
                 elif (val >= BAR1) & (val <= BAR5):
                     pygame.draw.rect(self.screen, col,
-                                     rect.inflate(val-4-2*self.cell_size // 3, val-4-2*self.cell_size // 3))
+                                     rect.inflate(2*val-8-2*self.cell_size // 3, 2*val-8-2*self.cell_size // 3))
 
         # Draw agent
         center_x = self.margin + (pos_x + 0.5) * self.cell_size

@@ -40,7 +40,7 @@ class Metazoan(Animal, ABC):
                  ):
         super().__init__(observation_schema=observation_schema, num_actions=num_actions)
         self.state_schema = state_schema
-        self.model = model
+        self.model = model.cuda()
         self.epsilon = epsilon
         self.temperature = temperature
 
@@ -61,8 +61,8 @@ class Metazoan(Animal, ABC):
         return action
 
     def act(self, observation: Observation = None) -> Action:
-        state = self.perceive(observation)
-        q_values = self.estimate_q(state)
+        state = self.perceive(observation).cuda()
+        q_values = self.estimate_q(state).cpu()
         action = self.select_action(q_values)
         return action
 
@@ -78,7 +78,7 @@ class Arthropod(Metazoan, ABC):
 
     def estimate_q(self, state: State) -> Tensor:
         with torch.no_grad():
-            q_values = self.model(state)  # simple feedforward
+            q_values = self.model(state.cuda()).cpu()  # simple feedforward
         return q_values
 
 

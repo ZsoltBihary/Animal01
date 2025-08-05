@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torchinfo import summary
-from line_profiler_pycharm import profile
+# from line_profiler_pycharm import profile
 
 
 class DepthwiseSeparableConv2D(nn.Module):
@@ -37,7 +37,7 @@ class ResBlockSeparable(nn.Module):
         self.bn2 = nn.BatchNorm2d(num_features=main_channels)
         self.relu2 = nn.ReLU()
 
-    @profile
+    # @profile
     def forward(self, x):
         skip = x
         out = self.conv1(x)

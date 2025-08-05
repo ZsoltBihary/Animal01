@@ -18,23 +18,32 @@ class DeepQLearning:
     def __init__(self, world: World, animal: Metazoan,
                  gamma: float,
                  num_episodes: int, steps_per_episode: int, buffer_capacity: int,
-                 num_epochs: int, batch_size: int, learning_rate: float,
+                 num_epochs: int, batch_size: int,
+                 learning_rate0: float, learning_rate1: float,
+                 epsilon0: float, epsilon1: float,
+                 temp0: float, temp1: float,
                  trainer_device: torch.device):
         self.world = world
         self.animal = animal
-        self.animal.model.eval()  # This is the online Q model, needs to be always in eval() mode
         self.gamma = gamma
-        self.num_episodes = num_episodes
-        self.steps_per_episode = steps_per_episode
+        self.num_episodes, self.steps_per_episode = num_episodes, steps_per_episode
+        self.num_epochs = num_epochs
+        self.learning_rate0, self.learning_rate1 = learning_rate0, learning_rate1
+        self.epsilon0, self.epsilon1 = epsilon0, epsilon1
+        self.temp0, self.temp1 = temp0, temp1
 
+        # Set up replay buffer
         self.buffer = ReplayBuffer(capacity=buffer_capacity, state_schema=animal.state_schema)
+        self.animal.model.eval()  # This is the online Q model, needs to be always in eval() mode
+        self.animal.model.cuda()
         # Make a clone of animal.model for double deep learning.
         self.target_model = copy.deepcopy(self.animal.model)
         self.target_model.eval()  # This is the target Q model, needs to be always in eval() mode
+        self.target_model.cuda()
         # Set up trainer
-        self.num_epochs = num_epochs
         self.trainer = QTrainer(self.animal.model, buffer=self.buffer, device=trainer_device,
-                                batch_size=batch_size, learning_rate=learning_rate)
+                                batch_size=batch_size, learning_rate=learning_rate0)
+        # Set up result collector buffer
         self.result = DQLResult(capacity=num_episodes)
 
     @profile
@@ -56,7 +65,7 @@ class DeepQLearning:
             best_next_action = torch.argmax(next_q_values, dim=1)  # (B, )
             # ... but the next q values are calculated with target model
             with torch.no_grad():
-                target_q_values = self.target_model(next_state)  # (B, A)
+                target_q_values = self.target_model(next_state.cuda()).cpu()  # (B, A)
             max_next_q = target_q_values.gather(1, best_next_action.unsqueeze(1)).squeeze(1)  # shape: (B,)
             target_q = (1.0 - self.gamma) * reward + self.gamma * max_next_q
             # Store transition. We use target_q, rather than storing (state, action, reward, next_state).
@@ -72,6 +81,16 @@ class DeepQLearning:
     @profile
     def run(self) -> DQLResult:
         for episode in range(self.num_episodes):
+            # === PARAMETER SETUP ===
+            ep_ratio = episode / (self.num_episodes - 1.0)
+            lr = self.learning_rate0 + (self.learning_rate1 - self.learning_rate0) * ep_ratio
+            self.trainer.set_learning_rate(new_lr=lr)
+            eps = self.epsilon0 + (self.epsilon1 - self.epsilon0) * ep_ratio
+            self.animal.epsilon = eps
+            temp = self.temp0 + (self.temp1 - self.temp0) * ep_ratio
+            self.animal.temperature = temp
+            # print("eps = ", eps, "temp = ", temp)
+
             # === ROLLOUT ===
             avg_reward = self.rollout()
             print("episode:", episode + 1, "/", self.num_episodes, "  Avg_reward:", int(avg_reward*10) / 10.0)

@@ -11,23 +11,26 @@ from pathlib import Path
 subfolder = Path("animations")
 subfolder.mkdir(parents=True, exist_ok=True)  # Make sure the folder exists
 video_path = subfolder / "roach10.mp4"
-
+video_steps = 500
 # Build up a grid world, with an insect.
-B = 256
-H = 15
-W = 23
+B = 1024
+H = 29
+W = 47
 R = 3
 food_r = 100.0
-bar_r = -100.0
+bar_r = -50.0
 move_r = -1.0
-food_d = 0.03
-bar_d = 0.3
+food_d = 0.02
+bar_d = 0.4
 # Other specs
-num_episodes = 5
-steps_per_episode = 32
-video_steps = 200
-epsilon, temperature = 0.05, 0.02
-buffer_capacity = int(steps_per_episode * B * 2.5)
+steps_per_episode = 10
+num_episodes = 1000
+
+lr0, lr1 = 0.001, 0.0001
+epsilon0, epsilon1 = 0.1, 0.01
+temp0, temp1 = 0.04, 0.02
+
+buffer_capacity = int(steps_per_episode * B * 5.0)
 trainer_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # trainer_device = torch.device("cpu")
 
@@ -54,14 +57,18 @@ print("Constructing Insect ...")  # =================================
 insect = Insect(observation_schema=observation_schema, state_schema=state_schema,
                 num_cell=num_cell, num_actions=num_actions,
                 model=model,
-                epsilon=epsilon, temperature=temperature)
+                epsilon=epsilon0, temperature=temp0)
 
 print("Constructing DeepQLearning ...")  # =================================
 dql_insect = DeepQLearning(world=world, animal=insect,
                            gamma=0.99,
                            num_episodes=num_episodes, steps_per_episode=steps_per_episode,
                            buffer_capacity=buffer_capacity,
-                           num_epochs=1, batch_size=128, learning_rate=0.001,
+                           num_epochs=1, batch_size=128,
+                           learning_rate0=lr0, learning_rate1=lr1,
+                           epsilon0=epsilon0, epsilon1=epsilon1,
+                           temp0=temp0,
+                           temp1=temp1,
                            trainer_device=trainer_device)
 
 print("Deep Q Learning ...")  # =================================
@@ -79,7 +86,7 @@ print("Constructing GridRenderer ...")  # =================================
 text_info = {
     "Animal": insect.__class__.__name__,
     "Model": model.__class__.__name__,
-    "Temperature": f"{temperature:.2f}",
+    "Temperature": f"{temp1:.2f}",
     "Food_reward": str(int(food_r)),
     "Max_bar_reward": str(int(bar_r)),
     "Move_reward": str(int(move_r)),
@@ -89,7 +96,7 @@ text_info = {
 }
 print(text_info)
 
-renderer = GridRenderer(world=world, text_info=text_info, cell_size=40)
+renderer = GridRenderer(world=world, text_info=text_info, cell_size=48)
 # renderer.play_simulation(result=sim_result, delay_ms=300)
 
 print("Animating simulation  ...")  # =================================

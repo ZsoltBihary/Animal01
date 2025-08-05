@@ -140,7 +140,7 @@ class GridWorld(World):
         pos = torch.stack([ys, xs], dim=1)  # (B, 2)
         # Distance mask: avoid change within observation window
         d = self.periodic_distance(pos, self.animal_pos)  # (B,)
-        change = (d > self.R).long()
+        change = (d >= self.R).long()
         # Update cells using arithmetic masking (GPU-friendly)
         batch_idx = torch.arange(self.B)
         current_cell = self.grid[batch_idx, ys, xs]
