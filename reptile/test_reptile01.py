@@ -8,7 +8,7 @@ from grid_renderer import GridRenderer
 from pathlib import Path
 
 # Define subfolder and filename
-subfolder = Path("animations")
+subfolder = Path("../insect_grid_world/animations")
 subfolder.mkdir(parents=True, exist_ok=True)  # Make sure the folder exists
 video_path = subfolder / "roach10.mp4"
 video_steps = 500

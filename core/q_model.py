@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from abc import ABC, abstractmethod
-from core.tensordict_helper import Schema, State
+from core.tensordict_helper import Schema, State, Observation, Action
 
 
 class MetazoanQModel(nn.Module, ABC):
@@ -15,13 +15,21 @@ class MetazoanQModel(nn.Module, ABC):
     def forward(self, state: State) -> Tensor: ...
 
 
-class VertebrateQModel(MetazoanQModel):
+class SDQNModel(nn.Module, ABC):
     @abstractmethod
-    def Q_and_update(self, state: State) -> tuple[Tensor, State]: ...
+    def SDQN(self, observation: Observation,  state: State) -> Tensor: ...
 
-    def forward(self, state: State) -> Tensor:
-        q_values, _ = self.Q_and_update(state)
-        return q_values
+    @abstractmethod
+    def forward(self, state: State) -> Tensor: ...
+
+
+# class VertebrateQModel(MetazoanQModel):
+#     @abstractmethod
+#     def Q_and_update(self, state: State) -> tuple[Tensor, State]: ...
+#
+#     def forward(self, state: State) -> Tensor:
+#         q_values, _ = self.Q_and_update(state)
+#         return q_values
 
 
 # class DuelingQHead(nn.Module):
