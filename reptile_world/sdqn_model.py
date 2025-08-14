@@ -1,477 +1,274 @@
 import torch
-from torch import Tensor
-import torch.nn as nn
-from reptile_world.custom_layers_sdqn import DepthwiseSeparableConv2D
-from reptile_world.config import Config, Encoded, BrainState, QA, RewardA, ObservationA
+from torch import nn
+from reptile_world.config import Config, Encoded, BrainSlice, BrainState, QA, RewardA, ObservationA
+from reptile_world.model_blocks import InputBlock, InnerBlock, DuelingQHead, RewardHead, ObsHead
 from torchinfo import summary
 
-#
-# from typing import Optional, Tuple
-# import torch
-# import torch.nn as nn
-#
-# TensorOrNone = Optional[torch.Tensor]
 
-# class SDQNModel(nn.Module):
-#     def __init__(self, conf):
-#         super().__init__()
-#         # ... your init as before ...
-#         # conv_inp, bn_inp, relu_inp, trunk, q_head, r_head, obs_head ...
-#         # keep ReLU inplace=False inside your custom layers if possible
-#
-#     def sdqn(self,
-#              encoded: torch.Tensor,
-#              state: torch.Tensor,
-#              compute_q: bool = True,
-#              compute_r: bool = True,
-#              compute_obs: bool = True,
-#              return_state: bool = True
-#     ) -> Tuple[TensorOrNone, TensorOrNone, TensorOrNone, Optional[torch.Tensor]]:
-#         """
-#         ALWAYS returns a 4-tuple: (q_a or None, r_a or None, obs_a or None, new_state or None)
-#         Heads are only computed when the corresponding compute_* flag is True.
-#         """
-#         x = self.conv_inp(encoded)
-#         x = self.bn_inp(x)
-#         x = self.relu_inp(x)  # ensure not inplace
-#
-#         x, new_state = self.trunk(x, state)
-#
-#         q_a = self.q_head(x) if compute_q else None
-#         r_a = self.r_head(x) if compute_r else None
-#         obs_a = self.obs_head(x) if compute_obs else None
-#
-#         return q_a, r_a, obs_a, (new_state if return_state else None)
-#
-#     # Thin wrappers for the common modes
-#     def forward(self, encoded: torch.Tensor, state: torch.Tensor):
-#         # training mode: compute all heads (no returned state required)
-#         q_a, r_a, obs_a, _ = self.sdqn(encoded, state,
-#                                        compute_q=True, compute_r=True, compute_obs=True,
-#                                        return_state=True)  # we receive state but ignore
-#         return q_a, r_a, obs_a
-#
-#     def rollout(self, encoded: torch.Tensor, state: torch.Tensor):
-#         # online rollout: get everything + new state
-#         return self.sdqn(encoded, state,
-#                          compute_q=True, compute_r=True, compute_obs=True,
-#                          return_state=True)
-#
-    # def target_q(self, encoded: torch.Tensor, state: torch.Tensor):
-    #     # target model only needs Q values; no grads, no state change
-    #     q_a, _, _, _ = self.sdqn(encoded, state,
-    #                              compute_q=True, compute_r=False, compute_obs=False,
-    #                              return_state=False)
-    #     return q_a
-#
-#     def simulate(self, encoded: torch.Tensor, state: torch.Tensor):
-#         # simulation: need q and new_state, no other heads
-#         q_a, _, _, new_state = self.sdqn(encoded, state,
-#                                          compute_q=True, compute_r=False, compute_obs=False,
-#                                          return_state=True)
-#         return q_a, new_state
-#
-#     def dream(self, encoded: torch.Tensor, state: torch.Tensor):
-#         # full model generation with state update
-#         return self.sdqn(encoded, state,
-#                          compute_q=True, compute_r=True, compute_obs=True,
-#                          return_state=True)
+class BrainBlock(nn.Module):
+    """
+    A single 'brain block' in the SDQN trunk.
+
+    Wraps an inner block with a residual connection and ReLU activation.
+    """
+    def __init__(self, conf: Config, inner_block_cls: type[nn.Module]):
+        super().__init__()
+        self.inner_block = inner_block_cls(conf=conf)
+        self.relu = nn.ReLU()
+
+    def forward(self, x: BrainSlice, s_i: BrainSlice) -> BrainSlice:
+        return self.relu(x + self.inner_block(s_i))
 
 
 class SDQNModel(nn.Module):
-    def __init__(self, conf: Config):
-        super().__init__()
-        self.conf = conf
-        # === Consume configuration parameters ===
-        self.device = conf.model_device
-        # self.B = conf.batch_size
-        self.C = conf.obs_channels
-        self.K = conf.obs_size
-        self.A = conf.num_actions
-        self.L = conf.brain_state_layers
-        self.S = conf.brain_state_channels
-        self.head_mult = conf.head_mult
-
-        # Convolution layer to transform encoded observation+last_action input in line with brain_state channels
-        self.conv_inp = nn.Conv2d(in_channels=self.C+self.A, out_channels=self.S,
-                                  kernel_size=1, padding=0, bias=False)
-        self.bn_inp = nn.BatchNorm2d(num_features=self.S)
-        self.relu_inp = nn.ReLU()
-        # Trunk is a "recurrent stateful residual CNN tower"
-        self.trunk = BrainTowerSeparable(num_layers=self.L,
-                                         main_channels=self.S, hid_channels=self.S // 2,
-                                         kernel_size=3)
-        # Q head is a Dueling network with pointwise conv + flattening + linear
-        self.q_head = DuelingHeadConv(main_channels=self.S, head_channels=self.head_mult,
-                                      flat_features=self.head_mult * self.K * self.K,
-                                      num_actions=self.A)
-        # Reward head is similar, but w/o the Dueling complication
-        self.r_head = RewardHeadConv(main_channels=self.S, head_channels=self.head_mult,
-                                     flat_features=self.head_mult * self.K * self.K,
-                                     num_actions=self.A)
-        # Observation head is a depthwise conv + pointwise conv
-        # self.obs_head = ObsHeadConv(main_channels=self.S,
-        #                             num_actions=self.A,
-        #                             num_classes=self.C)
-        # OR ... Observation head is a depthwise conv + grouped conv
-        self.obs_head = ObsHeadGroupedConv(main_channels=self.S, head_mult=self.head_mult,
-                                           num_actions=self.A,
-                                           num_classes=self.C)
-
-        self.to(self.device)  # This must be at the end of __init__()
-
-    def sdqn(self, encoded: Encoded, state: BrainState,
-             return_q=True, return_r=True, return_obs=True, return_state=True):
-        """
-        Core computation graph.
-        All other modes should call this with the appropriate flags.
-        """
-        x = self.conv_inp(encoded)
-        x = self.bn_inp(x)
-        x = self.relu_inp(x)
-
-        x, new_state = self.trunk(x, state)
-
-        q_a = self.q_head(x) if return_q else None
-        r_a = self.r_head(x) if return_r else None
-        obs_a = self.obs_head(x) if return_obs else None
-
-        if return_state:
-            return q_a, r_a, obs_a, new_state
-        else:
-            return q_a, r_a, obs_a
-
-    def forward(self, encoded: Encoded, state: BrainState):
-        # Training mode: full predictions, no new_state
-        q_a, r_a, obs_a, _ = self.sdqn(encoded, state, return_state=True)
-        return q_a, r_a, obs_a
-
-    def rollout(self, encoded: Encoded, state: BrainState):
-        # Online rollout: full predictions + state
-        return self.sdqn(encoded, state)
-
-    def target_q(self, encoded: Encoded, state: BrainState):
-        # Target model for double DQN: only q_a
-        q_a, _, _, _ = self.sdqn(encoded, state,
-                                 return_r=False, return_obs=False)
-        return q_a
-
-    def simulate(self, encoded: Encoded, state: BrainState):
-        # Simulation: q_a + state only
-        q_a, _, _, new_state = self.sdqn(encoded, state,
-                                         return_r=False, return_obs=False)
-        return q_a, new_state
-
-    def dream(self, encoded: Encoded, state: BrainState):
-        # Dreaming/planning: full predictions + state
-        return self.sdqn(encoded, state)
-
-    # def sdqn(self, encoded: Encoded, state: BrainState
-    #          ) -> tuple[QA, RewardA, ObservationA, BrainState]:
-    #
-    #     x = self.conv_inp(encoded)
-    #     x = self.bn_inp(x)
-    #     x = self.relu_inp(x)
-    #
-    #     x, new_state = self.trunk(x, state)
-    #
-    #     q_a = self.q_head(x)
-    #     r_a = self.r_head(x)
-    #     obs_a = self.obs_head(x)
-    #
-    #     return q_a, r_a, obs_a, new_state
-
-    # def forward(self, encoded: Encoded, state: BrainState
-    #             ) -> tuple[QA, RewardA, ObservationA]:
-    #
-    #     q_a, r_a, obs_a, _ = self.sdqn(encoded, state)
-    #     return q_a, r_a, obs_a
-
-
-class ObsHeadGroupedConv(nn.Module):
-    def __init__(self, main_channels: int, head_mult: int, num_actions: int, num_classes: int):
-        super().__init__()
-        assert main_channels % num_actions == 0, \
-            "main_channels must be divisible by num_actions for grouped conv."
-
-        self.num_actions = num_actions
-        self.num_classes = num_classes
-        self.channels_per_action = main_channels // num_actions
-
-        self.depthwise = nn.Conv2d(in_channels=main_channels,
-                                   out_channels=main_channels * head_mult,
-                                   kernel_size=3, padding=1,
-                                   groups=main_channels, bias=False)
-
-        self.relu = nn.ReLU()
-
-        self.grouped_conv = nn.Conv2d(in_channels=main_channels * head_mult,
-                                      out_channels=num_actions * num_classes,
-                                      kernel_size=1,
-                                      groups=num_actions, bias=True)
-
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Args:
-            x: (B, S, K, K) - shared spatial feature map
-        Returns:
-            obs_a: (B, A, C, K, K) - action-conditioned output
-        """
-        x = self.depthwise(x)                   # (B, S, K, K)
-        x = self.relu(x)
-        x = self.grouped_conv(x)                # (B, A*C, K, K)
-
-        B = x.shape[0]
-        x = x.view(B, self.num_actions, self.num_classes, *x.shape[2:])  # (B, A, C, K, K)
-        return x
-
-
-class ObsHeadConv(nn.Module):
-    def __init__(self, main_channels: int, num_actions: int, num_classes: int):
-        super().__init__()
-        self.num_actions = num_actions
-        self.num_classes = num_classes
-
-        self.depthwise = nn.Conv2d(in_channels=main_channels,
-                                   out_channels=main_channels,
-                                   kernel_size=3, padding=1,
-                                   groups=main_channels, bias=False)
-
-        self.relu = nn.ReLU()
-
-        self.pointwise = nn.Conv2d(in_channels=main_channels,
-                                   out_channels=num_actions * num_classes,
-                                   kernel_size=1, bias=True)
-
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Args:
-            x: (B, S, K, K) - shared spatial feature map
-        Returns:
-            obs_a: (B, A, C, K, K) - action-conditioned logits or probabilities
-        """
-        x = self.depthwise(x)                      # (B, S, K, K)
-        x = self.relu(x)
-        x = self.pointwise(x)                      # (B, A*C, K, K)
-        B = x.shape[0]
-        x = x.view(B, self.num_actions, self.num_classes, *x.shape[2:])  # (B, A, C, K, K)
-        return x
-
-
-class DuelingHeadConv(nn.Module):
-    def __init__(self, main_channels, head_channels, flat_features, num_actions):
-        super().__init__()
-
-        # === Value stream: outputs a scalar V ===
-        self.conv_val = nn.Conv2d(in_channels=main_channels, out_channels=head_channels,
-                                  kernel_size=1, bias=True)
-        # self.bn_val = nn.BatchNorm2d(num_features=1)
-        self.relu_val = nn.ReLU()
-        self.flat_val = nn.Flatten()
-        self.lin_val = nn.Linear(in_features=flat_features, out_features=1)
-
-        # === Advantage stream: outputs a vector A ===
-        self.conv_adv = nn.Conv2d(in_channels=main_channels, out_channels=head_channels,
-                                  kernel_size=1, bias=True)
-        # self.bn_adv = nn.BatchNorm2d(num_features=1)
-        self.relu_adv = nn.ReLU()
-        self.flat_adv = nn.Flatten()
-        self.lin_adv = nn.Linear(in_features=flat_features, out_features=num_actions)
-
-    def forward(self, x) -> QA:
-        """
-        Args:
-            x: Tensor of shape (B, M, K, K), the output from the residual tower trunk.
-        Returns:
-            q_values: Tensor of shape (B, A)
-        """
-
-        # === Value stream: outputs a scalar V ===
-        V = self.conv_val(x)                  # (B, 1, K, K)
-        # V = self.bn_val(V)                    # (B, 1, K, K)
-        V = self.relu_val(V)                  # (B, 1, K, K)
-        V = self.flat_val(V)                  # (B, K*K)
-        V = self.lin_val(V)                   # (B, 1)
-
-        # === Advantage stream: outputs a vector A ===
-        A = self.conv_adv(x)                  # (B, 1, K, K)
-        # A = self.bn_adv(A)                    # (B, 1, K, K)
-        A = self.relu_adv(A)                  # (B, 1, K, K)
-        A = self.flat_adv(A)                  # (B, K*K)
-        A = self.lin_adv(A)                   # (B, A)
-
-        # Combine streams: Q(s,a) = V(s) + A(s,a) - mean_a(A(s,a))
-        A_mean = A.mean(dim=1, keepdim=True)  # (B, 1)
-        Q = V + (A - A_mean)                  # (B, A)
-        return Q
-
-
-class RewardHeadConv(nn.Module):
-    def __init__(self, main_channels: int, head_channels: int, flat_features: int, num_actions: int):
-        super().__init__()
-
-        self.conv = nn.Conv2d(in_channels=main_channels, out_channels=head_channels,
-                              kernel_size=1, bias=True)
-        self.relu = nn.ReLU()
-        self.flatten = nn.Flatten()
-        self.linear = nn.Linear(in_features=flat_features, out_features=num_actions)
-
-    def forward(self, x: Tensor) -> RewardA:
-        """
-        Args:
-            x: Tensor of shape (B, S, K, K)
-
-        Returns:
-            r_a: Tensor of shape (B, A) - predicted reward per action
-        """
-        x = self.conv(x)       # (B, head_mult, K, K)
-        x = self.relu(x)
-        x = self.flatten(x)    # (B, flat_features)
-        r_a = self.linear(x)     # (B, A)
-        return r_a
-
-
-class BrainTowerSeparable(nn.Module):
     """
-    Stacked recurrent residual blocks for brain state update.
+    Stateful Deep Q-Network (SDQN) model.
 
-    Each block receives previous activation `x_prev` and a static brain state slice `s_i`.
+    The model consists of:
+    - An input processing block
+    - A stack ("brain tower") of BrainBlocks with independent parameters
+    - Output heads for Q-values, rewards, and observations
+
+    Provides multiple forward-like methods for different RL contexts:
+    - forward(): training prediction without state modification
+    - predict_q(): Q-values only, no state modification
+    - advance_with_aux(): advance state + return Q-values and aux predictions
+    - advance_q_only(): advance state + return Q-values only
 
     Args:
-        num_layers (int): Number of brain layers (L)
-        main_channels (int): Channel dimension of each state (S)
-        hid_channels (int): Hidden channels used inside each block
-        kernel_size (int): Kernel size for the depthwise separable convs
+        conf (Config): Model configuration and hyperparameters.
+        has_state (bool): If True, model uses a multi-layer persistent brain state.
+        return_aux (bool): Whether to compute and return auxiliary outputs by default.
+        input_block_cls (type[nn.Module]): Class for the input block.
+        inner_block_cls (type[nn.Module]): Class for the inner block in each BrainBlock.
+        q_head_cls (type[nn.Module]): Class for the Q-value head.
+        r_head_cls (type[nn.Module]): Class for the reward head.
+        obs_head_cls (type[nn.Module]): Class for the observation head.
     """
-
-    def __init__(self, num_layers: int, main_channels: int, hid_channels: int, kernel_size: int):
+    def __init__(self, conf: Config,
+                 has_state: bool, return_aux: bool,
+                 input_block_cls: type[nn.Module],
+                 inner_block_cls: type[nn.Module],
+                 q_head_cls: type[nn.Module],
+                 r_head_cls: type[nn.Module],
+                 obs_head_cls: type[nn.Module]):
         super().__init__()
-        self.L = num_layers
-        self.blocks = nn.ModuleList([
-            BrainBlockSeparable(
-                main_channels=main_channels,
-                hid_channels=hid_channels,
-                kernel_size=kernel_size
-            )
+        self.conf = conf
+        self.has_state = has_state
+        self.return_aux = return_aux
+        self.device = conf.model_device
+        self.L = conf.brain_state_layers
+
+        # Input and heads
+        self.input_block = input_block_cls(conf)
+        self.q_head = q_head_cls(conf)
+        self.r_head = r_head_cls(conf)
+        self.obs_head = obs_head_cls(conf)
+
+        # Brain tower (no shared weights between blocks)
+        self.trunk_blocks = nn.ModuleList([
+            BrainBlock(conf, inner_block_cls)
             for _ in range(self.L)
         ])
 
-    def forward(self, x0: Tensor, state: Tensor) -> tuple[Tensor, Tensor]:
+        self.to(self.device)
+
+    def _sdqn_step(self,
+                   encoded: Encoded,
+                   state: BrainState | None = None,
+                   modify_state: bool = False,
+                   return_r: bool = True,
+                   return_obs: bool = True) -> tuple[QA, RewardA | None, ObservationA | None]:
         """
+        Internal core step for SDQN forward logic.
+
         Args:
-            x0: Initial activation tensor (B, S, K, K)
-            state: Brain state tensor (B, L, S, K, K)
+            encoded (Encoded): Encoded environment input.
+            state (BrainState | None): Brain state tensor (B, L, S, K, K). Should be None if self.has_state=False.
+            modify_state (bool): If True, updates the state tensor in-place with new activations.
+            return_r (bool): If True, compute and return reward predictions.
+            return_obs (bool): If True, compute and return observation predictions.
 
         Returns:
-            x_last: Final activation tensor after recurrence (B, S, K, K)
-            updated_state: Full updated brain state (B, L, S, K, K)
+            tuple: (Q-values, reward predictions or None, observation predictions or None)
         """
-        x_prev = x0
-        x_list = []
+        if self.has_state:
+            assert state is not None, "State tensor required when has_state=True"
+            assert state.shape[1] == self.L, \
+                f"Expected state to have {self.L} layers, got {state.shape[1]}"
+
+        x = self.input_block(encoded)
 
         for i in range(self.L):
-            s_i = state[:, i, ...]        # Static input slice (B, S, K, K)
-            x_i = self.blocks[i](x_prev, s_i)
-            x_list.append(x_i)
-            x_prev = x_i
+            if self.has_state:
+                x = self.trunk_blocks[i](x, state[:, i, ...])
+                if modify_state:
+                    state[:, i, ...] = x.detach()
+            else:
+                x = self.trunk_blocks[i](x, x)
 
-        updated_state = torch.stack(x_list, dim=1)  # (B, L, S, K, K)
-        x_last = x_prev
-        return x_last, updated_state
+        q_a = self.q_head(x)
+        r_a = self.r_head(x) if return_r else None
+        obs_a = self.obs_head(x) if return_obs else None
+        return q_a, r_a, obs_a
 
-
-class BrainBlockSeparable(nn.Module):
-    """
-    A recurrent residual block used in SDQN, combining the prior activation `x_prev`
-    with a static state slice `s_i`.
-
-    Args:
-        main_channels (int): Number of channels for both input/output activation tensors.
-        hid_channels (int): Intermediate hidden channel size.
-        kernel_size (int): Kernel size for depthwise separable convolutions.
-    """
-
-    def __init__(self, main_channels: int, hid_channels: int, kernel_size: int):
-        super().__init__()
-        self.conv1 = DepthwiseSeparableConv2D(
-            in_channels=main_channels,
-            out_channels=hid_channels,
-            kernel_size=kernel_size
-        )
-        self.bn1 = nn.BatchNorm2d(hid_channels)
-        self.relu1 = nn.ReLU()
-
-        self.conv2 = DepthwiseSeparableConv2D(
-            in_channels=hid_channels,
-            out_channels=main_channels,
-            kernel_size=kernel_size
-        )
-        self.bn2 = nn.BatchNorm2d(main_channels)
-        self.relu2 = nn.ReLU()
-
-    def forward(self, x_prev: Tensor, s_i: Tensor) -> Tensor:
+    def forward(self,
+                encoded: Encoded,
+                state: BrainState | None = None) -> tuple[QA, RewardA, ObservationA]:
         """
-        Forward pass for the block.
+        Standard PyTorch forward method.
+
+        Used during training to compute Q-values and optional auxiliary predictions
+        without modifying the brain state.
 
         Args:
-            x_prev (Tensor): Previous activation (B, main_channels, K, K)
-            s_i (Tensor): Static brain state slice (B, main_channels, K, K)
+            encoded (Encoded): Encoded environment input.
+            state (BrainState | None): Brain state tensor.
 
         Returns:
-            x_i (Tensor): Updated activation (B, main_channels, K, K)
+            tuple: (Q-values, reward predictions, observation predictions)
         """
-        out = self.conv1(s_i)
-        out = self.bn1(out)
-        out = self.relu1(out)
+        q_a, r_a, obs_a = self._sdqn_step(encoded, state,
+                                          modify_state=False,
+                                          return_r=self.return_aux,
+                                          return_obs=self.return_aux)
+        return q_a, r_a, obs_a
 
-        out = self.conv2(out)
-        out = self.bn2(out)
+    def predict_q(self,
+                  encoded: Encoded,
+                  state: BrainState | None = None) -> QA:
+        """
+        Compute Q-values without modifying the brain state and without auxiliary outputs.
 
-        out = out + x_prev  # Skip connection
-        out = self.relu2(out)
+        Used by target networks in Double DQN to estimate Q-values for the next state.
 
-        return out
+        Args:
+            encoded (Encoded): Encoded environment input.
+            state (BrainState | None): Brain state tensor.
+
+        Returns:
+            QA: Predicted Q-values.
+        """
+        q_a, _, _ = self._sdqn_step(encoded, state,
+                                    modify_state=False,
+                                    return_r=False,
+                                    return_obs=False)
+        return q_a
+
+    def advance_with_aux(self,
+                         encoded: Encoded,
+                         state: BrainState | None = None) -> tuple[QA, RewardA, ObservationA]:
+        """
+        Advance the brain state and compute Q-values plus auxiliary predictions.
+
+        Used during rollout for experience collection: updates the brain state
+        and returns predictions for Q-values, rewards, and observations.
+
+        Args:
+            encoded (Encoded): Encoded environment input.
+            state (BrainState | None): Brain state tensor to update in-place.
+
+        Returns:
+            tuple: (Q-values, reward predictions, observation predictions)
+        """
+        q_a, r_a, obs_a = self._sdqn_step(encoded, state,
+                                          modify_state=True,
+                                          return_r=self.return_aux,
+                                          return_obs=self.return_aux)
+        return q_a, r_a, obs_a
+
+    def advance_q_only(self,
+                       encoded: Encoded,
+                       state: BrainState | None = None) -> QA:
+        """
+        Advance the brain state and compute Q-values only.
+
+        Used during deployment when the environment supplies rewards and observations.
+
+        Args:
+            encoded (Encoded): Encoded environment input.
+            state (BrainState | None): Brain state tensor to update in-place.
+
+        Returns:
+            QA: Predicted Q-values.
+        """
+        q_a, _, _ = self._sdqn_step(encoded, state,
+                                    modify_state=True,
+                                    return_r=False,
+                                    return_obs=False)
+        return q_a
 
 
 if __name__ == "__main__":
-
+    # --- Default config and model creation ---
     config = Config()
 
-    # Instantiate model
-    model = SDQNModel(config)
+    model = SDQNModel(
+        conf=config,
+        has_state=True,
+        return_aux=True,
+        input_block_cls=InputBlock,
+        inner_block_cls=InnerBlock,
+        q_head_cls=DuelingQHead,
+        r_head_cls=RewardHead,
+        obs_head_cls=ObsHead
+    )
 
-    # Create dummy encoded observation+action (B, C + A, K, K)
-    encoded = torch.randn(config.batch_size, config.obs_channels + config.num_actions,
-                          config.obs_size, config.obs_size, device=config.model_device)
+    # --- Dummy inputs ---
+    # Encoded input: (B, C_obs + C_action, K, K)
+    encoded = torch.randn(
+        config.batch_size,
+        config.obs_channels + config.num_actions,
+        config.obs_size,
+        config.obs_size,
+        device=config.model_device
+    )
 
-    # Create dummy brain state (L, B, S, K, K)
+    # Brain state: (B, L, S, K, K)
     brain_state = torch.zeros(
-                              config.batch_size,
-                              config.brain_state_layers,
-                              config.brain_state_channels,
-                              config.obs_size,
-                              config.obs_size,
-                              device=config.brain_device)
+        config.batch_size,
+        config.brain_state_layers,
+        config.brain_state_channels,
+        config.obs_size,
+        config.obs_size,
+        device=config.brain_device
+    )
 
-    # Forward pass (for training)
+    # --- 1. forward() ---
     q_a, r_a, obs_a = model(encoded, brain_state)
+    print("\n[forward()] Shapes:")
+    print(f"q_a   : {q_a.shape}  # Expected: (B, A)")
+    print(f"r_a   : {r_a.shape}  # Expected: (B, A)")
+    print(f"obs_a : {obs_a.shape}  # Expected: (B, A, C, K, K)")
 
-    print(f"\n[Forward] Shapes:")
-    print(f"q_a     : {q_a.shape}  # Expected: (B, A)")
-    print(f"r_a     : {r_a.shape}  # Expected: (B, A)")
-    print(f"obs_a   : {obs_a.shape}  # Expected: (B, A, C, K, K)")
+    # --- 2. predict_q() ---
+    q_pred = model.predict_q(encoded, brain_state)
+    print("\n[predict_q()] Shapes:")
+    print(f"q_pred: {q_pred.shape}  # Expected: (B, A)")
 
-    # Full SDQN pass (returns updated brain state too)
-    q_a2, r_a2, obs_a2, new_state = model.sdqn(encoded, brain_state)
+    # --- 3. advance_with_aux() ---
+    state_copy = brain_state.clone()
+    q_a2, r_a2, obs_a2 = model.advance_with_aux(encoded, state_copy)
+    print("\n[advance_with_aux()] Shapes:")
+    print(f"q_a   : {q_a2.shape}  # Expected: (B, A)")
+    print(f"r_a   : {r_a2.shape}  # Expected: (B, A)")
+    print(f"obs_a : {obs_a2.shape}  # Expected: (B, A, C, K, K)")
+    print(f"state updated? {not torch.equal(brain_state, state_copy)}  # Should be True")
 
-    print(f"\n[SDQN] Shapes:")
-    print(f"q_a     : {q_a2.shape}")
-    print(f"r_a     : {r_a2.shape}")
-    print(f"obs_a   : {obs_a2.shape}")
-    print(f"new_state : {new_state.shape}  # Expected: (B, L, S, K, K)")
+    # --- 4. advance_q_only() ---
+    state_copy2 = brain_state.clone()
+    q_a3 = model.advance_q_only(encoded, state_copy2)
+    print("\n[advance_q_only()] Shapes:")
+    print(f"q_a   : {q_a3.shape}  # Expected: (B, A)")
+    print(f"state updated? {not torch.equal(brain_state, state_copy2)}  # Should be True")
 
-    # Model summary
-    print("\n[Model Summary]")
-    summary(model, input_data=(encoded, brain_state), col_names=["input_size", "output_size", "num_params"], depth=10)
-    print("\n[Model Summary]")
-    summary(model, input_data=(encoded, brain_state), col_names=["input_size", "output_size", "num_params"], depth=1)
+    # --- Model summary ---
+    print("\n[Model Summary - depth=10]")
+    summary(model, input_data=(encoded, brain_state),
+            col_names=["input_size", "output_size", "num_params"],
+            depth=10)
+
+    print("\n[Model Summary - depth=1]")
+    summary(model, input_data=(encoded, brain_state),
+            col_names=["input_size", "output_size", "num_params"],
+            depth=1)

@@ -5,6 +5,7 @@ Observation = Tensor    # typically shape: (B, K, K) or similar
 Action = Tensor         # shape: (B,)
 Reward = Tensor         # shape: (B,)
 Encoded = Tensor        # shape: (B, C+A, K, K)
+BrainSlice = Tensor     # shape: (B, S, K, K)
 BrainState = Tensor     # shape: (B, L, S, K, K)
 QA = Tensor             # Q-values: (B, A)
 RewardA = Tensor        # predicted rewards: (B, A)
@@ -121,6 +122,7 @@ class Config:
         self.obs_channels = self.num_cell
         self.obs_radius = obs_radius
         self.obs_size = 2 * obs_radius + 1
+        self.encoded_channels = self.num_actions + self.num_cell
 
         self.brain_state_layers = brain_state_layers
         self.brain_state_channels = brain_state_channels
