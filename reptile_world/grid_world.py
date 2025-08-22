@@ -107,6 +107,8 @@ class GridWorld:
         x = self.animal_pos[:, 1].view(self.B, 1, 1) + torch.arange(self.K).view(1, 1, self.K)
         # Use batched indexing to extract observation windows
         observation = padded[b, y, x]  # (B, K, K)
+        # Zero out the central ANIMAL observation - it should be EMPTY
+        observation[:, self.R, self.R] = self.EMPTY
         return observation
 
     def step(self):

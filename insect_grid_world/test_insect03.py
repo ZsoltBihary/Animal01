@@ -11,20 +11,20 @@ from pathlib import Path
 subfolder = Path("animations")
 subfolder.mkdir(parents=True, exist_ok=True)  # Make sure the folder exists
 video_path = subfolder / "roach10.mp4"
-video_steps = 500
+video_steps = 200
 # Build up a grid world, with an insect.
-B = 1024
+B = 512
 H = 29
 W = 47
 R = 3
-food_r = 100.0
+food_r = 47.0
 bar_r = -50.0
-move_r = -1.0
-food_d = 0.02
-bar_d = 0.3
+move_r = 0.0
+food_d = 0.09
+bar_d = 0.0
 # Other specs
-steps_per_episode = 5
-num_episodes = 500
+steps_per_episode = 50
+num_episodes = 20
 
 lr0, lr1 = 0.001, 0.0001
 epsilon0, epsilon1 = 0.1, 0.02

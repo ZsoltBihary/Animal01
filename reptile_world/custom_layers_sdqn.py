@@ -1,7 +1,63 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchinfo import summary
 # from line_profiler_pycharm import profile
+
+
+class PriorConv2d(nn.Module):
+    """
+    Conv2d with C-dependent trainable padding prior instead of zeros.
+    Drop-in replacement for nn.Conv2d (same signature for in/out channels).
+
+    - prior is a Parameter of shape (C_in,)
+    - padding is forced to 0 in Conv2d, handled manually with prior-fill trick
+    """
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size=3, stride=1, dilation=1, bias=True,
+                 prior=None, trainable_prior=True):
+        super().__init__()
+        # standard conv but with no padding (we handle it ourselves)
+        self.conv = nn.Conv2d(in_channels, out_channels,
+                              kernel_size=kernel_size,
+                              stride=stride, padding=0,
+                              dilation=dilation, bias=bias)
+
+        if prior is None:
+            prior = torch.zeros(in_channels)  # default: "zero prior"
+        if trainable_prior:
+            self.prior = nn.Parameter(prior.float())
+        else:
+            self.register_buffer("prior", prior.float())
+
+        # force kernel_size into tuple
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+        self.kernel_size = kernel_size
+
+    def forward(self, x):
+        """
+        x: (B, C, H, W)
+        returns: (B, out_channels, H, W) with prior-filled padding
+        """
+        B, C, H, W = x.shape
+        ky, kx = self.kernel_size
+
+        # how much to pad to preserve spatial size
+        pad_y, pad_x = ky // 2, kx // 2
+
+        # step 1: subtract prior inside
+        inner = x - self.prior.view(1, C, 1, 1)
+
+        # step 2: zero pad
+        padded = F.pad(inner, (pad_x, pad_x, pad_y, pad_y), value=0)
+
+        # step 3: add prior back everywhere
+        canvas = padded + self.prior.view(1, C, 1, 1)
+
+        # conv with no padding
+        return self.conv(canvas)
 
 
 class DepthwiseSeparableConv2D(nn.Module):

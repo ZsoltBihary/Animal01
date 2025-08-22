@@ -53,7 +53,7 @@ class DuelingQHead(nn.Module):
     def __init__(self, conf: Config):
         super().__init__()
         # === Consume configuration parameters ===
-        self.B = conf.batch_size
+        # self.B = conf.batch_size
         self.A = conf.num_actions
         self.S = conf.brain_state_channels
         K = conf.obs_size
@@ -62,14 +62,14 @@ class DuelingQHead(nn.Module):
 
         # === Value stream: outputs a scalar V ===
         self.conv_val = nn.Conv2d(in_channels=self.S, out_channels=mult,
-                                  kernel_size=1, bias=True)
+                                  kernel_size=1, bias=False)
         self.relu_val = nn.ReLU()
         self.flat_val = nn.Flatten()
         self.lin_val = nn.Linear(in_features=flat, out_features=1)
 
         # === Advantage stream: outputs a vector A ===
         self.conv_adv = nn.Conv2d(in_channels=self.S, out_channels=mult,
-                                  kernel_size=1, bias=True)
+                                  kernel_size=1, bias=False)
         # self.bn_adv = nn.BatchNorm2d(num_features=1)
         self.relu_adv = nn.ReLU()
         self.flat_adv = nn.Flatten()
@@ -98,7 +98,7 @@ class RewardHead(nn.Module):
     def __init__(self, conf: Config):
         super().__init__()
         # === Consume configuration parameters ===
-        self.B = conf.batch_size
+        # self.B = conf.batch_size
         self.C = conf.obs_channels
         self.A = conf.num_actions
         self.S = conf.brain_state_channels
@@ -124,7 +124,7 @@ class ObsHead(nn.Module):
     def __init__(self, conf: Config):
         super().__init__()
         # === Consume configuration parameters ===
-        self.B = conf.batch_size
+        # self.B = conf.batch_size
         self.C = conf.obs_channels
         self.A = conf.num_actions
         self.S = conf.brain_state_channels
@@ -141,7 +141,8 @@ class ObsHead(nn.Module):
         x = self.depthwise(x)                      # (B, S*mult, K, K)
         x = self.relu(x)
         x = self.pointwise(x)                      # (B, A*C, K, K)
-        x = x.view(self.B, self.A, self.C, self.K, self.K)  # (B, A, C, K, K)
+        B = x.shape[0]
+        x = x.view(B, self.A, self.C, self.K, self.K)  # (B, A, C, K, K)
         return x
 
 

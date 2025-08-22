@@ -14,10 +14,30 @@ class BrainBlock(nn.Module):
     def __init__(self, conf: Config, inner_block_cls: type[nn.Module]):
         super().__init__()
         self.inner_block = inner_block_cls(conf=conf)
-        self.relu = nn.ReLU()
+
+        # pick activation from config string
+        # act_name = getattr(conf, "activation", "relu").lower()
+        act_name = "sigmoid"
+        # act_name = "tanh"
+        if act_name == "relu":
+            self.activate = nn.ReLU()
+        elif act_name == "sigmoid":
+            self.activate = nn.Sigmoid()
+        elif act_name == "tanh":
+            self.activate = nn.Tanh()
+        elif act_name == "silu":
+            self.activate = nn.SiLU()  # aka swish
+        elif act_name == "gelu":
+            self.activate = nn.GELU()
+        elif act_name == "identity":
+            self.activate = nn.Identity()  # passthrough
+        else:
+            raise ValueError(f"Unknown activation {act_name}")
+
+        # self.relu = nn.ReLU()
 
     def forward(self, x: BrainSlice, s_i: BrainSlice) -> BrainSlice:
-        return self.relu(x + self.inner_block(s_i))
+        return self.activate(x + self.inner_block(s_i))
 
 
 class SDQNModel(nn.Module):
@@ -50,20 +70,28 @@ class SDQNModel(nn.Module):
                  input_block_cls: type[nn.Module],
                  inner_block_cls: type[nn.Module],
                  q_head_cls: type[nn.Module],
-                 r_head_cls: type[nn.Module],
-                 obs_head_cls: type[nn.Module]):
+                 r_head_cls: type[nn.Module] | None = None,
+                 obs_head_cls: type[nn.Module] | None = None):
         super().__init__()
+
         self.conf = conf
         self.has_state = has_state
         self.return_aux = return_aux
+        if self.return_aux:
+            assert r_head_cls is not None and obs_head_cls is not None, \
+                "Auxiliary heads required when return_aux=True"
         self.device = conf.model_device
         self.L = conf.brain_state_layers
 
         # Input and heads
         self.input_block = input_block_cls(conf)
         self.q_head = q_head_cls(conf)
-        self.r_head = r_head_cls(conf)
-        self.obs_head = obs_head_cls(conf)
+        if self.return_aux:
+            self.r_head = r_head_cls(conf)
+            self.obs_head = obs_head_cls(conf)
+        else:
+            self.r_head = None
+            self.obs_head = None
 
         # Brain tower (no shared weights between blocks)
         self.trunk_blocks = nn.ModuleList([
@@ -76,9 +104,7 @@ class SDQNModel(nn.Module):
     def _sdqn_step(self,
                    encoded: Encoded,
                    state: BrainState | None = None,
-                   modify_state: bool = False,
-                   return_r: bool = True,
-                   return_obs: bool = True) -> tuple[QA, RewardA | None, ObservationA | None]:
+                   modify_state: bool = False) -> tuple[QA, RewardA | None, ObservationA | None]:
         """
         Internal core step for SDQN forward logic.
 
@@ -86,18 +112,16 @@ class SDQNModel(nn.Module):
             encoded (Encoded): Encoded environment input.
             state (BrainState | None): Brain state tensor (B, L, S, K, K). Should be None if self.has_state=False.
             modify_state (bool): If True, updates the state tensor in-place with new activations.
-            return_r (bool): If True, compute and return reward predictions.
-            return_obs (bool): If True, compute and return observation predictions.
 
         Returns:
-            tuple: (Q-values, reward predictions or None, observation predictions or None)
+            tuple: (Q-values, reward predictions or None, observation predictions or None).
         """
         if self.has_state:
             assert state is not None, "State tensor required when has_state=True"
             assert state.shape[1] == self.L, \
                 f"Expected state to have {self.L} layers, got {state.shape[1]}"
 
-        x = self.input_block(encoded)
+        x = self.input_block(encoded.to(device=self.device, non_blocking=True))
 
         for i in range(self.L):
             if self.has_state:
@@ -108,13 +132,13 @@ class SDQNModel(nn.Module):
                 x = self.trunk_blocks[i](x, x)
 
         q_a = self.q_head(x)
-        r_a = self.r_head(x) if return_r else None
-        obs_a = self.obs_head(x) if return_obs else None
+        r_a = self.r_head(x) if self.return_aux else None
+        obs_a = self.obs_head(x) if self.return_aux else None
         return q_a, r_a, obs_a
 
     def forward(self,
                 encoded: Encoded,
-                state: BrainState | None = None) -> tuple[QA, RewardA, ObservationA]:
+                state: BrainState | None = None) -> tuple[QA, RewardA | None, ObservationA | None]:
         """
         Standard PyTorch forward method.
 
@@ -129,9 +153,7 @@ class SDQNModel(nn.Module):
             tuple: (Q-values, reward predictions, observation predictions)
         """
         q_a, r_a, obs_a = self._sdqn_step(encoded, state,
-                                          modify_state=False,
-                                          return_r=self.return_aux,
-                                          return_obs=self.return_aux)
+                                          modify_state=False)
         return q_a, r_a, obs_a
 
     def predict_q(self,
@@ -150,9 +172,7 @@ class SDQNModel(nn.Module):
             QA: Predicted Q-values.
         """
         q_a, _, _ = self._sdqn_step(encoded, state,
-                                    modify_state=False,
-                                    return_r=False,
-                                    return_obs=False)
+                                    modify_state=False)
         return q_a
 
     def advance_with_aux(self,
@@ -161,7 +181,7 @@ class SDQNModel(nn.Module):
         """
         Advance the brain state and compute Q-values plus auxiliary predictions.
 
-        Used during rollout for experience collection: updates the brain state
+        Used during planning: updates the brain state
         and returns predictions for Q-values, rewards, and observations.
 
         Args:
@@ -172,18 +192,16 @@ class SDQNModel(nn.Module):
             tuple: (Q-values, reward predictions, observation predictions)
         """
         q_a, r_a, obs_a = self._sdqn_step(encoded, state,
-                                          modify_state=True,
-                                          return_r=self.return_aux,
-                                          return_obs=self.return_aux)
+                                          modify_state=True)
         return q_a, r_a, obs_a
 
-    def advance_q_only(self,
-                       encoded: Encoded,
-                       state: BrainState | None = None) -> QA:
+    def advance_q(self,
+                  encoded: Encoded,
+                  state: BrainState | None = None) -> QA:
         """
         Advance the brain state and compute Q-values only.
 
-        Used during deployment when the environment supplies rewards and observations.
+        Used during deployment, or rollout when the environment supplies rewards and observations.
 
         Args:
             encoded (Encoded): Encoded environment input.
@@ -193,9 +211,7 @@ class SDQNModel(nn.Module):
             QA: Predicted Q-values.
         """
         q_a, _, _ = self._sdqn_step(encoded, state,
-                                    modify_state=True,
-                                    return_r=False,
-                                    return_obs=False)
+                                    modify_state=True)
         return q_a
 
 
@@ -238,8 +254,14 @@ if __name__ == "__main__":
     q_a, r_a, obs_a = model(encoded, brain_state)
     print("\n[forward()] Shapes:")
     print(f"q_a   : {q_a.shape}  # Expected: (B, A)")
-    print(f"r_a   : {r_a.shape}  # Expected: (B, A)")
-    print(f"obs_a : {obs_a.shape}  # Expected: (B, A, C, K, K)")
+    if r_a is None:
+        print("r_a = None")
+    else:
+        print(f"r_a   : {r_a.shape}  # Expected: (B, A)")
+    if obs_a is None:
+        print("obs_a = None")
+    else:
+        print(f"obs_a : {obs_a.shape}  # Expected: (B, A, C, K, K)")
 
     # --- 2. predict_q() ---
     q_pred = model.predict_q(encoded, brain_state)
@@ -251,24 +273,25 @@ if __name__ == "__main__":
     q_a2, r_a2, obs_a2 = model.advance_with_aux(encoded, state_copy)
     print("\n[advance_with_aux()] Shapes:")
     print(f"q_a   : {q_a2.shape}  # Expected: (B, A)")
-    print(f"r_a   : {r_a2.shape}  # Expected: (B, A)")
-    print(f"obs_a : {obs_a2.shape}  # Expected: (B, A, C, K, K)")
-    print(f"state updated? {not torch.equal(brain_state, state_copy)}  # Should be True")
+    if r_a2 is None:
+        print("r_a = None")
+    else:
+        print(f"r_a   : {r_a2.shape}  # Expected: (B, A)")
+    if obs_a2 is None:
+        print("obs_a = None")
+    else:
+        print(f"obs_a : {obs_a2.shape}  # Expected: (B, A, C, K, K)")
+    print(f"state updated? {not torch.equal(brain_state, state_copy)}  # Should be ", model.has_state)
 
     # --- 4. advance_q_only() ---
     state_copy2 = brain_state.clone()
-    q_a3 = model.advance_q_only(encoded, state_copy2)
+    q_a3 = model.advance_q(encoded, state_copy2)
     print("\n[advance_q_only()] Shapes:")
     print(f"q_a   : {q_a3.shape}  # Expected: (B, A)")
-    print(f"state updated? {not torch.equal(brain_state, state_copy2)}  # Should be True")
+    print(f"state updated? {not torch.equal(brain_state, state_copy2)}  # Should be ", model.has_state)
 
     # --- Model summary ---
-    print("\n[Model Summary - depth=10]")
+    print("\n[Model Summary]")
     summary(model, input_data=(encoded, brain_state),
             col_names=["input_size", "output_size", "num_params"],
-            depth=10)
-
-    print("\n[Model Summary - depth=1]")
-    summary(model, input_data=(encoded, brain_state),
-            col_names=["input_size", "output_size", "num_params"],
-            depth=1)
+            depth=3)

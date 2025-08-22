@@ -6,7 +6,7 @@ from torchinfo import summary
 
 
 class Reptile:
-    def __init__(self, conf: Config, model: SDQNModel, brain_state: BrainState = None):
+    def __init__(self, conf: Config, model: SDQNModel, brain_state: BrainState | None = None):
 
         self.conf = conf
         # === Consume configuration parameters ===
@@ -25,7 +25,7 @@ class Reptile:
 
         # Set up brain state
         if brain_state is None:
-            self.brain_state = torch.rand(self.B, self.L, self.S, self.K, self.K)  # random brain (B, L, S, K, K)
+            self.brain_state = 0.99 * torch.rand(self.B, self.L, self.S, self.K, self.K)  # random brain (B, L, S, K, K)
         else:
             self.brain_state = brain_state
         self.brain_state = self.brain_state.to(self.brain_device)
@@ -36,7 +36,7 @@ class Reptile:
             observation: Tensor(B, K, K)
             last_action: Tensor(B,)
         Returns:
-            encoded: Tensor(B, C+A, K, K)
+            encoded: Tensor(B, E=C+A, K, K)
         """
         # === PROCESS OBSERVATION ===
         clamped = observation.clamp(min=0, max=self.C - 1)               # (B, K, K)
@@ -78,12 +78,37 @@ class Reptile:
         return q_a, r_a, obs_a, new_brain_state
 
     def select_action(self, q_a: QA) -> Action:
+    #     """
+    #     Epsilon-soft strategy, with random policy selection based on Q(s, a) values
+    #     """
+    #     logits = q_a / self.temperature
+    #     probs = F.softmax(logits, dim=-1)
+    #     probs = (1.0 - self.epsilon) * probs + self.epsilon / probs.size(-1)
+    #     action = torch.multinomial(probs, num_samples=1).squeeze(1)
+    #     return action
+    #
+    # def select_action(self, q_a: torch.Tensor) -> torch.Tensor:
         """
-        Epsilon-soft strategy, with random policy selection based on Q(s, a) values
+        Epsilon-soft strategy, robust version.
+        Handles large logits, small temperatures, and avoids NaNs.
         """
+        # --- Step 1: Scale by temperature ---
         logits = q_a / self.temperature
+
+        # --- Step 2: Numerical stabilization ---
+        # Subtract max along action dimension to prevent overflow in softmax
+        logits = logits - logits.max(dim=-1, keepdim=True)[0]
+
+        # --- Step 3: Softmax ---
         probs = F.softmax(logits, dim=-1)
+
+        # --- Step 4: Epsilon-greedy smoothing ---
         probs = (1.0 - self.epsilon) * probs + self.epsilon / probs.size(-1)
+
+        # --- Step 5: Clamp for safety ---
+        probs = torch.clamp(probs, min=1e-8, max=1.0)
+
+        # --- Step 6: Sample action ---
         action = torch.multinomial(probs, num_samples=1).squeeze(1)
         return action
 
@@ -93,13 +118,6 @@ class Reptile:
         self.brain_state = new_brain_state
         action = self.select_action(q_a)
         return action
-
-    # def act_dissected(self, observation: Observation, last_action: Action
-    #                   ) -> tuple[Action, QA, RewardA, ObservationA, BrainState]:
-    #     encoded = self.encode(observation, last_action)
-    #     q_a, pred_r, pred_obs, new_brain = self.predict(encoded, self.brain_state)
-    #     action = self.select_action(q_a)
-    #     return action, q_a, pred_r, pred_obs, new_brain
 
 
 if __name__ == "__main__":

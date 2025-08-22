@@ -1,15 +1,15 @@
 import torch
 from torch import Tensor
 
-Observation = Tensor    # typically shape: (B, K, K) or similar
+Observation = Tensor    # shape: (B, K, K)
 Action = Tensor         # shape: (B,)
 Reward = Tensor         # shape: (B,)
-Encoded = Tensor        # shape: (B, C+A, K, K)
+Encoded = Tensor        # shape: (B, E=C+A, K, K)
 BrainSlice = Tensor     # shape: (B, S, K, K)
 BrainState = Tensor     # shape: (B, L, S, K, K)
-QA = Tensor             # Q-values: (B, A)
-RewardA = Tensor        # predicted rewards: (B, A)
-ObservationA = Tensor   # predicted observations: (B, C, K, K)
+QA = Tensor             # q_a action-values: (B, A)
+RewardA = Tensor        # r_a action-conditional predicted rewards: (B, A)
+ObservationA = Tensor   # obs_a action-conditional predicted observations: (B, C, K, K)
 
 CUDA_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -70,7 +70,7 @@ class Config:
 
     def __init__(
             self,
-            batch_size: int = 16,
+            batch_size: int = 1024,
             grid_height: int = 19,
             grid_width: int = 29,
             # obs_channels: int = num_cell,
@@ -84,28 +84,39 @@ class Config:
             brain_on_GPU: bool = True,
             buffer_on_GPU: bool = False,
 
-            buffer_reuse: float = 2.0,
+            buffer_reuse: float = 1.0,
 
-            food_density: float = 0.06,
-            barr_density: float = 0.2,
+            food_density: float = 0.09,
+            barr_density: float = 0.1,
             food_growth_intensity: float = 0.2,
             world_reset_intensity: float = 0.02,
 
             gamma: float = 0.99,
-            num_episodes: int = 10,
-            steps_per_episode: int = 25,
+            num_episodes: int = 100,
+            steps_per_episode: int = 100,
             num_epochs: int = 1,
+            training_batch_size: int = 128,
             learning_rate0: float = 0.001,
             learning_rate1: float = 0.0001,
+
+            loss_r_weight: float = 0.0,
+            loss_obs_weight: float = 0.0,
+            weight_decay: float = 0.00001,
+
             epsilon0: float = 0.1,
             epsilon1: float = 0.02,
-            temperature0: float = 0.05,
-            temperature1: float = 0.02
+            temperature0: float = 0.1,
+            temperature1: float = 0.05
     ):
         self.gamma = gamma
         self.num_episodes, self.steps_per_episode = num_episodes, steps_per_episode
         self.num_epochs = num_epochs
+        self.training_batch_size = training_batch_size
         self.learning_rate0, self.learning_rate1 = learning_rate0, learning_rate1
+        self.loss_r_weight = loss_r_weight
+        self.loss_obs_weight = loss_obs_weight
+        self.weight_decay = weight_decay
+
         self.epsilon0, self.epsilon1 = epsilon0, epsilon1
         self.temperature0, self.temperature1 = temperature0, temperature1
 
